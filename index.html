@@ -1510,17 +1510,44 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
       </div>
       <div id="mapSearchResults" style="max-height:44vh;overflow:auto;margin-top:4px"></div>
     </div>
-    <div id="mapHistBar" style="display:none;position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:600;background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:6px 10px;box-shadow:0 8px 22px rgba(0,0,0,.28);display:none;flex-direction:column;align-items:center;gap:4px">
-      <div style="display:flex;align-items:center;gap:4px">
+    <div id="mapHistBar" style="display:none;position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:600;background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:10px 12px;box-shadow:0 8px 22px rgba(0,0,0,.28);flex-direction:column;align-items:stretch;gap:8px;min-width:236px">
+      <div style="display:flex;align-items:center;gap:2px">
         <button id="mapHistPrev" style="width:34px;height:34px;border:none;border-radius:50%;background:transparent;color:inherit;font-size:19px">‹</button>
-        <div id="mapHistDate" style="min-width:118px;text-align:center;font-size:13px;font-weight:650"></div>
+        <button id="mapHistDate" style="flex:1;min-width:120px;text-align:center;font-size:13.5px;font-weight:700;background:transparent;border:none;color:inherit;padding:6px 4px;border-radius:10px"></button>
         <button id="mapHistNext" style="width:34px;height:34px;border:none;border-radius:50%;background:transparent;color:inherit;font-size:19px">›</button>
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;padding-bottom:2px">
-        <span style="opacity:.7">с</span><select id="mapHistFrom" style="background:transparent;color:inherit;border:1px solid var(--panel-line);border-radius:8px;padding:3px 6px;font:inherit"></select>
-        <span style="opacity:.7">по</span><select id="mapHistTo" style="background:transparent;color:inherit;border:1px solid var(--panel-line);border-radius:8px;padding:3px 6px;font:inherit"></select>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px">
+        <span style="opacity:.7">с</span><button class="histchip" id="histFromBtn"></button>
+        <span style="opacity:.7">по</span><button class="histchip" id="histToBtn"></button>
       </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px">
+        <span style="opacity:.7">кто:</span><button class="histchip" id="histWhoBtn" style="max-width:158px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button id="histApply">Показать</button>
+        <button id="histReset">Сбросить</button>
+      </div>
+      <button id="histExit">Выйти из истории</button>
     </div>
+    <div id="histPop" style="display:none;position:absolute;z-index:1300;background:var(--panel);border:1px solid var(--panel-line);border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.4);padding:6px;max-height:280px;overflow:auto"></div>
+    <style id="histUiCss">
+      .histchip{background:transparent;color:inherit;border:1px solid var(--panel-line);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:600;min-width:62px;text-align:center}
+      .histchip:active{transform:scale(.95)}
+      #histPop .histopt{display:block;width:100%;text-align:left;background:transparent;color:inherit;border:none;border-radius:9px;padding:9px 16px;font-size:14.5px;white-space:nowrap;min-width:110px}
+      #histPop .histopt.on{background:var(--accent);color:#fff;font-weight:700}
+      .histcal{width:236px}
+      .histcalhd{display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px;font-weight:700;font-size:14px}
+      .histcalnav{width:32px;height:32px;border:none;background:transparent;color:inherit;font-size:20px;border-radius:8px}
+      .histcalgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+      .histcaldow{text-align:center;font-size:10px;opacity:.55;font-weight:700;padding-bottom:2px}
+      .histcalday{aspect-ratio:1;border:none;background:transparent;color:inherit;border-radius:9px;font-size:13px;font-weight:600}
+      .histcalday.today{outline:1.5px solid var(--accent);outline-offset:-2px}
+      .histcalday.sel{background:var(--accent);color:#fff}
+      .histcalday.dis{opacity:.25}
+      #histApply{flex:1;border:none;border-radius:11px;background:var(--accent);color:#fff;font-weight:700;font-size:13.5px;padding:10px 0}
+      #histReset{border:1px solid var(--panel-line);border-radius:11px;background:transparent;color:inherit;font-weight:600;font-size:13px;padding:10px 16px}
+      #histExit{border:none;background:transparent;color:var(--muted);font-size:12px;padding:0;margin-top:-2px;text-decoration:underline}
+    </style>
   </div>
 </div>
 <div class="cal" id="colView">
@@ -2210,6 +2237,7 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
   },true);
   window.addEventListener('unhandledrejection',function(ev){
     var r=ev&&ev.reason;var m=(r&&r.message)?r.message:String(r);
+    if(/location services|geolocation|not enabled|kCLError|location.*unavailable/i.test(m)){ try{if(window.__geoFail)window.__geoFail();}catch(_){} return; } // геолокация на Mac/без GPS — ожидаемо, не ошибка приложения
     var st=(r&&r.stack)?('\n'+r.stack):'';
     _show('Promise: '+m+st);
   });
@@ -3296,7 +3324,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.58';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.70';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -3382,7 +3410,7 @@ function _syncSetInfo(){
 (function(){var ss=document.getElementById('settingsSheet');if(!ss)return;ss.addEventListener('click',function(e){var row=e.target.closest('.srow.tog');if(!row||e.target.closest('.sw'))return;var sw=row.querySelector('.sw');if(sw)sw.click();});})();
 function closeSettings(){if(settingsSheet.classList.contains('show')){settingsSheet.classList.remove('show');unlockScroll();}}
 (function(){var b=document.getElementById('setBurger');if(b)b.addEventListener('click',function(){ if(window._featSet){closeSettings();goHome();} else openNav(); });})();
-settingsSheet.addEventListener('click',e=>{if(e.target.closest('.sw,.srow.tog'))return;const b=e.target.closest('button,label');if(b)setTimeout(closeSettings,0);});
+settingsSheet.addEventListener('click',e=>{if(e.target.closest('.sw,.srow.tog,#setBurger'))return;const b=e.target.closest('button,label');if(b)setTimeout(closeSettings,0);});
 function _syncThemeBtn(light){var tb=document.getElementById('themeBtn');if(tb)tb.classList.toggle('on',light);}
 function applyTheme(){const light=localStorage.getItem('tb.theme')==='light';document.body.classList.toggle('light',light);document.documentElement.style.background=light?'#e9e9e9':'#121212';_syncThemeBtn(light);}
 document.getElementById('themeBtn').addEventListener('click',()=>{const light=document.body.classList.toggle('light');document.documentElement.style.background=light?'#e9e9e9':'#121212';try{localStorage.setItem('tb.theme',light?'light':'dark');}catch(e){}_syncThemeBtn(light);toast(light?'Светлая тема':'Тёмная тема');});
@@ -5594,7 +5622,15 @@ function openColleagues(){
 (function(){var b=document.getElementById('colBack');if(b)b.addEventListener('click',function(){openNav();});})();
 // ===== Служба безопасности =====
 (function(){var b=document.getElementById('secBack');if(b)b.addEventListener('click',function(){openNav();});})();
-let _leafMap=null,_leafMarks=[],_mapRefT=null,_mapLayers=[],_mapFrom='own',_mapFitted=false,_mapReturnTo='home',_mapLastRows=[];
+let _leafMap=null,_leafMarks=[],_mapRefT=null,_mapLayers=[],_mapFrom='own',_mapFitted=false,_mapReturnTo='home',_mapLastRows=[],_liveReqT=null;
+// Устройство без сенсора = Mac (пульт наблюдения): не рисуем свой GPS, а показываем свою метку из таблицы.
+// Детект по maxTouchPoints ненадёжен («Designed for iPad» на Mac прикидывается iPad'ом), поэтому
+// основной сигнал — _geoFailed: если геолокация реально недоступна (Mac/выключен GPS), включаем свою метку.
+// ВНИМАНИЕ: UA iPhone содержит «like Mac OS X» — НЕ матчить «Mac OS X» (иначе _isMac=true на iPhone,
+// и своя живая точка пропадает). Только «Macintosh» (десктопный Safari). Основной сигнал — _geoFailed.
+var _isMac=((navigator.maxTouchPoints||0)<1)||/Macintosh/.test(navigator.userAgent||'');
+var _geoFailed=false;
+window.__geoFail=function(){ _geoFailed=true; try{ var mv=document.getElementById('mapView'); if(mv&&mv.classList.contains('show')&&typeof _mapRefresh==='function')_mapRefresh(); }catch(e){} };
 let _followMe=false,_meWatch=null,_meMarker=null,_meCircle=null,_followTarget=null,_meStarting=false;
 let _mapMode=(function(){try{return localStorage.getItem('tb.mapMode')||'sat';}catch(e){return 'sat';}})();
 // Esri — макс. качество без API-ключа: спутник-гибрид (снимки+дороги+подписи) или детальная схема
@@ -5663,11 +5699,22 @@ function openLocMap(){
   closeAllSheets();closeSettings();
   ['secView','secOwnView','analyticsView','cal','meetingsView','tasksView','graphView','projView','projDetail','boardsView','boardCanvas','tline','teamView','helpView','colView','settingsSheet'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('show');});
   lockScroll();document.getElementById('mapView').classList.add('show');
+  // чистый вход: сбросить возможную свёрнутую историю с прошлого раза
+  _histOn=false;_histCollapsed=false;try{_histClosePop();}catch(e){}var _hb=document.getElementById('mapHistBar');if(_hb)_hb.style.display='none';var _hbt=document.getElementById('mapHistBtn');if(_hbt){_hbt.style.background='var(--panel)';_hbt.style.color='inherit';}
   currentView='map';try{syncSidenav();}catch(e){}
   _mapFitted=false;_mapLoadNames();_mapSubscribeRT();
   setTimeout(function(){ _mapInit(); _mapRefresh(); if(!_histOn)_mapStartMe(); },60);
   if(_mapRefT)clearInterval(_mapRefT);
   _mapRefT=setInterval(function(){ if(document.getElementById('mapView').classList.contains('show'))_mapRefresh(); else {clearInterval(_mapRefT);_mapRefT=null;} },15000);
+  // «Живой режим»: пока карта открыта — просим сервер ускорить видимых участников (~2с). Истекает сам за 2мин.
+  if(_liveReqT)clearInterval(_liveReqT);
+  var _reqLiveTick=function(){ try{
+    if(!document.getElementById('mapView').classList.contains('show')){ clearInterval(_liveReqT);_liveReqT=null;return; }
+    var myId=(window.johnLoc&&johnLoc.myId&&johnLoc.myId())||'';
+    var ids=(_mapLastRows||[]).map(function(r){return r.user_id;}).filter(function(u){return u&&u!==myId;});
+    if(window.johnLoc&&johnLoc.reqLive&&ids.length)johnLoc.reqLive(ids);
+  }catch(e){} };
+  setTimeout(_reqLiveTick,2600); _liveReqT=setInterval(_reqLiveTick,45000);
 }
 function _mapInit(){
   if(!window.L){try{toast('Карта не загрузилась — проверьте интернет');}catch(e){}return;}
@@ -5689,17 +5736,19 @@ function _mapRefresh(){
   _mapQ.then(function(rows){
     if(_histOn){_leafMarks.forEach(function(m){try{_leafMap.removeLayer(m);}catch(e){}});_leafMarks=[];return;}
     _leafMarks.forEach(function(m){try{_leafMap.removeLayer(m);}catch(e){}});_leafMarks=[];
-    // СВОЯ точка — из живого GPS (см. _mapOnMe), поэтому себя из таблицы locations пропускаем
-    rows=(rows||[]).filter(function(r){return r.lat!=null&&r.lng!=null&&r.user_id!==myId;});
+    // СВОЯ точка — из живого GPS (см. _mapOnMe), поэтому себя из таблицы обычно пропускаем.
+    // НО на Mac живого GPS нет → показываем свою позицию (iPhone) меткой «Вы» из таблицы.
+    rows=(rows||[]).filter(function(r){return r.lat!=null&&r.lng!=null&&(_isMac||_geoFailed||r.user_id!==myId);});
     _mapLastRows=rows; // кэш для поиска участников
     var pts=[],targetLL=null;
     rows.forEach(function(r){
       var t=new Date(r.updated_at).getTime();
+      var self=(r.user_id===myId);
       // Статус по СВЕЖЕСТИ, а не только по флагу sharing: <2.5мин — на связи; иначе «нет связи» (приглушённо)
       var st=_locStatus(r.sharing,t); // {live, txt}
-      var icon=_pinIcon('#e11d48',!st.live);
+      var icon=_pinIcon(self?'#2f6df0':'#e11d48',!st.live);
       var m=L.marker([r.lat,r.lng],{icon:icon}).addTo(_leafMap);
-      var lab=_mapName(r.user_id);
+      var lab=self?'Вы':_mapName(r.user_id);
       m.bindTooltip(lab,{permanent:true,direction:'top',offset:[0,-40],className:'maplabel'+(st.live?'':' off')});
       m.bindPopup('<b>'+lab+'</b><br>'+st.txt+'<br><a href="#" class="mapfollowlink" data-uid="'+r.user_id+'">Вести в движении ▸</a>');
       m.on('click',function(){ _leafMap.setView([r.lat,r.lng],Math.max(_leafMap.getZoom(),16)); });
@@ -5730,6 +5779,7 @@ function _mapUpdFollowChip(){var c=document.getElementById('mapFollowChip');if(!
 function _geoDist(a,b,c,d){var R=6371000,p=Math.PI/180,s1=Math.sin((c-a)*p/2),s2=Math.sin((d-b)*p/2);var h=s1*s1+Math.cos(a*p)*Math.cos(c*p)*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
 var _meLastGood=null;
 function _mapOnMe(pos){try{if(!pos||!pos.coords||!_leafMap)return;var lat=pos.coords.latitude,lng=pos.coords.longitude,acc=pos.coords.accuracy||0;
+  _geoFailed=false; // реальная позиция пришла — своя метка из таблицы не нужна, показываем живую точку
   // РЭБ/GPS-спуфинг: игнорируем явный мусор и «телепорты», чтобы точка не прыгала в реку (Wi-Fi/соты ~100-500м проходят)
   if(acc>1000)return;
   var _tn=Date.now(); if(_meLastGood){var dd=_geoDist(_meLastGood.lat,_meLastGood.lng,lat,lng),dtt=Math.max(1,(_tn-_meLastGood.t)/1000); if(dd>150&&dd/dtt>35)return;}
@@ -5742,6 +5792,7 @@ function _mapOnMe(pos){try{if(!pos||!pos.coords||!_leafMap)return;var lat=pos.co
   else if(!_mapFitted&&!_followTarget){_leafMap.setView(ll,16);_mapFitted=true;} // первый фикс — открываем на себе (как Google)
 }catch(e){}}
 function _mapStartMe(){
+  if(_isMac)return; // на Mac своего GPS нет — свою позицию показываем меткой из таблицы (см. _mapRefresh)
   if(_meWatch!=null||_meStarting)return; // уже следим или запуск в процессе (гонка async-разрешения)
   _meStarting=true;
   var begin=function(){
@@ -5756,10 +5807,10 @@ function _mapStartMe(){
     } else _mapMeFallback();
     _meStarting=false;
   };
-  if(window.johnLoc&&johnLoc.ensurePerm){ johnLoc.ensurePerm().then(function(ok){ if(ok)begin(); else _meStarting=false; },function(){ begin(); }); }
+  if(window.johnLoc&&johnLoc.ensurePerm){ johnLoc.ensurePerm().then(function(ok){ if(ok)begin(); else {_meStarting=false;if(window.__geoFail)window.__geoFail();} },function(){ begin(); }); }
   else begin();
 }
-function _mapMeFallback(){ if(!navigator.geolocation)return; try{_meWatch=navigator.geolocation.watchPosition(_mapOnMe,function(){},{enableHighAccuracy:true,maximumAge:4000,timeout:20000});}catch(e){} }
+function _mapMeFallback(){ if(!navigator.geolocation){if(window.__geoFail)window.__geoFail();return;} try{_meWatch=navigator.geolocation.watchPosition(_mapOnMe,function(){if(window.__geoFail)window.__geoFail();},{enableHighAccuracy:true,maximumAge:4000,timeout:20000});}catch(e){if(window.__geoFail)window.__geoFail();} }
 function _mapStopMe(){
   _followMe=false;
   try{var G=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Geolocation;if(_meWatch!=null&&typeof _meWatch==='string'&&G&&G.clearWatch)Promise.resolve(G.clearWatch({id:_meWatch})).catch(function(){});}catch(e){}
@@ -5813,7 +5864,7 @@ function _mapFocusUser(uid){
 (function(){var b=document.getElementById('mapSearchBtn');if(b)b.addEventListener('click',function(){_mapOpenSearch();});})();
 (function(){var b=document.getElementById('mapSearchClose');if(b)b.addEventListener('click',function(){_mapCloseSearch();});})();
 (function(){var i=document.getElementById('mapSearchInp');if(i)i.addEventListener('input',function(){_mapRenderSearch(i.value);});})();
-function _mapBackToSec(){ _mapStopMe();_mapUnsubscribeRT();_followTarget=null;_histOn=false;try{_mapClearHist();}catch(e){}try{_mapCloseSearch();}catch(e){} document.getElementById('mapView').classList.remove('show');
+function _mapBackToSec(){ _mapStopMe();_mapUnsubscribeRT();_followTarget=null;_histOn=false;_histCollapsed=false;try{_histClosePop();}catch(e){}try{_mapClearHist();}catch(e){}try{_mapCloseSearch();}catch(e){}try{if(_liveReqT){clearInterval(_liveReqT);_liveReqT=null;}}catch(e){} document.getElementById('mapView').classList.remove('show');
   var r=_mapReturnTo;
   try{
     if(r==='projDetail'&&typeof openProjDetail==='function'&&typeof projDetailId!=='undefined'&&projDetailId){openProjDetail(projDetailId);return;}
@@ -5827,28 +5878,35 @@ function _mapBackToSec(){ _mapStopMe();_mapUnsubscribeRT();_followTarget=null;_h
 (function(){var b=document.getElementById('mapBack');if(b)b.addEventListener('click',function(){_mapBackToSec();});})();
 
 // ——— История передвижений (маршрут за день) ———
-let _histOn=false,_histDay=null,_histLayers=[],_histFromH=0,_histToH=24;
-function _histDayBounds(){var d=_histDay||new Date();var s=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);s.setHours(_histFromH,0,0,0);var e=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);e.setHours(_histToH,0,0,0);return {from:s.toISOString(),to:e.toISOString()};}
-function _histBuildHourSelects(){
-  var f=document.getElementById('mapHistFrom'),t=document.getElementById('mapHistTo');if(!f||!t)return;
-  var hh=function(h){return ('0'+h).slice(-2)+':00';};
-  if(!f.options.length){var o1='';for(var i=0;i<=23;i++)o1+='<option value="'+i+'">'+hh(i)+'</option>';f.innerHTML=o1;
-    var o2='';for(var j=1;j<=24;j++)o2+='<option value="'+j+'">'+(j===24?'24:00':hh(j))+'</option>';t.innerHTML=o2;}
-  f.value=String(_histFromH);t.value=String(_histToH);
-}
+let _histOn=false,_histDay=null,_histLayers=[],_histFromM=0,_histToM=1440,_histUser='',_histCollapsed=false,_histCalView=null;
+function _histDayBounds(){var d=_histDay||new Date();var base=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0).getTime();return {from:new Date(base+_histFromM*60000).toISOString(),to:new Date(base+_histToM*60000).toISOString()};}
+// Свои (не системные) пикеры истории: время (шаг 30 мин), человек, календарь даты
+function _histFmtMin(m){if(m>=1440)return '24:00';var h=Math.floor(m/60),mi=m%60;return ('0'+h).slice(-2)+':'+('0'+mi).slice(-2);}
+function _histTimeItems(isFrom){var items=[],lo=isFrom?0:(_histFromM+30),hi=isFrom?(_histToM-30):1440;for(var m=lo;m<=hi;m+=30)items.push({val:m,label:_histFmtMin(m)});return items;}
+function _histWhoLabel(){if(!_histUser)return 'Все';var myId=(window.johnLoc&&johnLoc.myId&&johnLoc.myId())||'';if(_histUser===myId)return 'Вы';return _mapName(_histUser)||'участник';}
+function _histWhoItems(){var myId=(window.johnLoc&&johnLoc.myId&&johnLoc.myId())||'';var items=[{val:'',label:'Все'}];if(myId)items.push({val:myId,label:'Вы'});Object.keys(_mapNames||{}).forEach(function(uid){if(uid!==myId)items.push({val:uid,label:_mapName(uid)});});return items;}
+function _histSyncChips(){var f=document.getElementById('histFromBtn');if(f)f.textContent=_histFmtMin(_histFromM);var t=document.getElementById('histToBtn');if(t)t.textContent=_histFmtMin(_histToM);var w=document.getElementById('histWhoBtn');if(w)w.textContent=_histWhoLabel();var dl=document.getElementById('mapHistDate');if(dl)dl.textContent=_histLabel();}
+function _histClosePop(){var p=document.getElementById('histPop');if(p){p.style.display='none';p.onclick=null;}}
+function _histPopAt(anchor){var pop=document.getElementById('histPop'),bar=document.getElementById('mapHistBar');if(!pop||!bar)return;var cont=bar.parentNode;var cr=cont.getBoundingClientRect(),ar=anchor.getBoundingClientRect(),br=bar.getBoundingClientRect();pop.style.display='block';var pw=pop.offsetWidth;var left=ar.left-cr.left+ar.width/2-pw/2;if(left+pw>cr.width-8)left=cr.width-8-pw;if(left<8)left=8;pop.style.left=left+'px';pop.style.top=(br.bottom-cr.top+6)+'px';}
+function _histOpenList(anchor,items,cur,cb){var pop=document.getElementById('histPop');if(!pop)return;pop.innerHTML=items.map(function(it){return '<button class="histopt'+(String(it.val)===String(cur)?' on':'')+'" data-v="'+esc(String(it.val))+'">'+esc(it.label)+'</button>';}).join('');pop.onclick=function(ev){var b=ev.target.closest&&ev.target.closest('.histopt');if(!b)return;_histClosePop();cb(b.dataset.v);};_histPopAt(anchor);var on=pop.querySelector('.histopt.on');if(on)try{on.scrollIntoView({block:'center'});}catch(e){}}
+function _histMonthName(mo){return ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][mo];}
+function _histOpenCal(anchor){var d=_histDay||new Date();_histCalView=new Date(d.getFullYear(),d.getMonth(),1);_histRenderCal(anchor);}
+function _histRenderCal(anchor){var pop=document.getElementById('histPop');if(!pop)return;var v=_histCalView,y=v.getFullYear(),mo=v.getMonth();var today=new Date();today.setHours(0,0,0,0);var sel=_histDay?new Date(_histDay.getFullYear(),_histDay.getMonth(),_histDay.getDate()).getTime():0;var startDow=(new Date(y,mo,1).getDay()+6)%7;var days=new Date(y,mo+1,0).getDate();var html='<div class="histcal"><div class="histcalhd"><button class="histcalnav" data-nav="-1">‹</button><span>'+_histMonthName(mo)+' '+y+'</span><button class="histcalnav" data-nav="1">›</button></div><div class="histcalgrid">';['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(function(w){html+='<div class="histcaldow">'+w+'</div>';});for(var i=0;i<startDow;i++)html+='<div></div>';for(var dd=1;dd<=days;dd++){var cur=new Date(y,mo,dd).getTime();var fut=cur>today.getTime();var cls='histcalday';if(cur===sel)cls+=' sel';if(cur===today.getTime())cls+=' today';if(fut)cls+=' dis';html+='<button class="'+cls+'"'+(fut?' disabled':'')+' data-d="'+dd+'">'+dd+'</button>';}html+='</div></div>';pop.innerHTML=html;pop.onclick=function(ev){var nav=ev.target.closest&&ev.target.closest('.histcalnav');if(nav){_histCalView=new Date(y,mo+(+nav.dataset.nav),1);_histRenderCal(anchor);return;}var db=ev.target.closest&&ev.target.closest('.histcalday');if(db&&!db.disabled){_histDay=new Date(y,mo,+db.dataset.d);_histClosePop();_histSyncChips();_mapDrawHist();}};_histPopAt(anchor);}
 function _histLabel(){var d=_histDay||new Date();var t=new Date();var same=d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate();var lbl=fmtDate(d.getTime());return same?('сегодня · '+lbl):lbl;}
 function _hhmm(d){return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
 function _mapClearHist(){_histLayers.forEach(function(l){try{_leafMap.removeLayer(l);}catch(e){}});_histLayers=[];}
 function _mapToggleHist(on){
   _histOn=(on==null)?!_histOn:on;
   var bar=document.getElementById('mapHistBar'),btn=document.getElementById('mapHistBtn');
-  if(_histOn){ if(!_histDay)_histDay=new Date(); if(bar)bar.style.display='flex'; if(btn){btn.style.background='var(--accent)';btn.style.color='#fff';}
-    _histBuildHourSelects();
+  if(_histOn){ _histCollapsed=false; if(!_histDay)_histDay=new Date(); if(bar)bar.style.display='flex'; if(btn){btn.style.background='var(--accent)';btn.style.color='#fff';}
+    _histSyncChips();
     // только маршрут: убираем живые метки и свою точку
     _leafMarks.forEach(function(m){try{_leafMap.removeLayer(m);}catch(e){}});_leafMarks=[]; _mapStopMe(); _mapDrawHist(); }
-  else { if(bar)bar.style.display='none'; if(btn){btn.style.background='var(--panel)';btn.style.color='inherit';} _mapClearHist(); _mapStartMe(); _mapRefresh(); }
+  else { _histCollapsed=false; _histClosePop(); if(bar)bar.style.display='none'; if(btn){btn.style.background='var(--panel)';btn.style.color='inherit';} _mapClearHist(); _mapStartMe(); _mapRefresh(); }
 }
-function _mapHistShift(n){ var d=_histDay||new Date(); _histDay=new Date(d.getFullYear(),d.getMonth(),d.getDate()+n); _mapDrawHist(); }
+// «Показать» — прячет панель (история остаётся на карте), кнопка 🕐 разворачивает обратно
+function _histCollapse(){_histCollapsed=true;_histClosePop();var bar=document.getElementById('mapHistBar');if(bar)bar.style.display='none';}
+function _mapHistShift(n){var d=_histDay||new Date();var nd=new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);var t=new Date();t.setHours(0,0,0,0);if(nd.getTime()>t.getTime())return;_histDay=nd;_histSyncChips();_mapDrawHist();}
 function _mapDrawHist(){
   if(!window.L||!_leafMap||!window.johnLoc||!johnLoc.history)return;
   var dl=document.getElementById('mapHistDate'); if(dl)dl.textContent=_histLabel();
@@ -5860,6 +5918,7 @@ function _mapDrawHist(){
     var byU={}; rows.forEach(function(r){ (byU[r.user_id]=byU[r.user_id]||[]).push(r); });
     var allPts=[];
     Object.keys(byU).forEach(function(uid){
+      if(_histUser && uid!==_histUser)return; // показываем историю только выбранного человека
       var arr=byU[uid].sort(function(a,b){return new Date(a.ts)-new Date(b.ts);});
       var pts=arr.map(function(r){return [r.lat,r.lng];});
       if(!pts.length)return;
@@ -5885,16 +5944,23 @@ function _mapDrawHist(){
       allPts=allPts.concat(pts);
     });
     if(allPts.length){ try{_leafMap.fitBounds(allPts,{padding:[60,60]});_mapFitted=true;}catch(e){} }
+    else if(_histUser){ try{toast('Нет точек у выбранного за '+_histLabel());}catch(e){} }
     var dl2=document.getElementById('mapHistDate');
     if(dl2){ var tmin=null,tmax=null; rows.forEach(function(r){var t=new Date(r.ts).getTime(); if(tmin==null||t<tmin)tmin=t; if(tmax==null||t>tmax)tmax=t;}); if(tmin!=null)dl2.textContent=_histLabel()+' · '+_hhmm(new Date(tmin))+'–'+_hhmm(new Date(tmax)); }
   });
 }
-(function(){var b=document.getElementById('mapHistBtn');if(b)b.addEventListener('click',function(){_mapToggleHist();});})();
+(function(){var b=document.getElementById('mapHistBtn');if(b)b.addEventListener('click',function(){ if(!_histOn){_mapToggleHist(true);} else if(_histCollapsed){_histCollapsed=false;var bar=document.getElementById('mapHistBar');if(bar)bar.style.display='flex';} else {_histCollapse();} });})();
 (function(){var b=document.getElementById('mapModeBtn');if(b)b.addEventListener('click',function(){_mapSetMode(_mapMode==='street'?'sat':'street');});})();
 (function(){var b=document.getElementById('mapHistPrev');if(b)b.addEventListener('click',function(){_mapHistShift(-1);});})();
 (function(){var b=document.getElementById('mapHistNext');if(b)b.addEventListener('click',function(){_mapHistShift(1);});})();
-(function(){var f=document.getElementById('mapHistFrom');if(f)f.addEventListener('change',function(){_histFromH=+f.value;if(_histToH<=_histFromH)_histToH=Math.min(24,_histFromH+1);_histBuildHourSelects();_mapDrawHist();});})();
-(function(){var t=document.getElementById('mapHistTo');if(t)t.addEventListener('change',function(){_histToH=+t.value;if(_histToH<=_histFromH)_histFromH=Math.max(0,_histToH-1);_histBuildHourSelects();_mapDrawHist();});})();
+(function(){var b=document.getElementById('mapHistDate');if(b)b.addEventListener('click',function(){_histOpenCal(b);});})();
+(function(){var b=document.getElementById('histFromBtn');if(b)b.addEventListener('click',function(){_histOpenList(b,_histTimeItems(true),_histFromM,function(v){_histFromM=+v;if(_histToM<=_histFromM)_histToM=Math.min(1440,_histFromM+30);_histSyncChips();_mapDrawHist();});});})();
+(function(){var b=document.getElementById('histToBtn');if(b)b.addEventListener('click',function(){_histOpenList(b,_histTimeItems(false),_histToM,function(v){_histToM=+v;if(_histToM<=_histFromM)_histFromM=Math.max(0,_histToM-30);_histSyncChips();_mapDrawHist();});});})();
+(function(){var b=document.getElementById('histWhoBtn');if(b)b.addEventListener('click',function(){_histOpenList(b,_histWhoItems(),_histUser,function(v){_histUser=v;_histSyncChips();_mapDrawHist();});});})();
+(function(){var b=document.getElementById('histApply');if(b)b.addEventListener('click',function(){_histCollapse();});})();
+(function(){var b=document.getElementById('histReset');if(b)b.addEventListener('click',function(){_histDay=new Date();_histFromM=0;_histToM=1440;_histUser='';_histClosePop();_histSyncChips();_mapDrawHist();});})();
+(function(){var b=document.getElementById('histExit');if(b)b.addEventListener('click',function(){_mapToggleHist(false);});})();
+document.addEventListener('click',function(ev){var pop=document.getElementById('histPop');if(!pop||pop.style.display==='none')return;if(ev.target.closest&&(ev.target.closest('#histPop')||ev.target.closest('.histchip')||ev.target.closest('#mapHistDate')))return;_histClosePop();});
 document.addEventListener('click',function(ev){try{var t=ev.target&&ev.target.closest?ev.target.closest('.locmapbtn,[data-locmap]'):null;if(t){ev.preventDefault();openLocMap();}}catch(e){}});
 document.addEventListener('click',function(ev){try{
   var t=ev.target&&ev.target.closest?ev.target.closest('.sw,#secMuteBtn,#secLocBtn,#soLocBtn,[data-sonewsnd],[data-sosnd],[data-socol],[data-sonewcol]'):null;
@@ -5975,8 +6041,19 @@ function renderSecView(){
 }
 let secHistOpen=false,_sirCtx=null,_sirT=null,_secMuted=false,_secSeq=0;
 const SEC_COLORS=['#e11d48','#ea580c','#c08a2e','#2fa37a','#2f6df0','#8b5cf6'];
-const SEC_SOUNDS=[['','Стандартный'],['siren','Сирена'],['pulse','Пульс'],['horn','Гудок']];
-const SEC_SNDFILE={siren:'siren.caf',pulse:'pulse.caf',horn:'horn.caf'};
+const SEC_SOUNDS=[['','Стандартный'],['siren','Сирена'],['pulse','Пульс'],['horn','Гудок'],['bell','Колокол'],['ring','Звонок'],['chime','Куранты'],['msg','Сообщение']];
+const SEC_SNDFILE={siren:'siren.caf',pulse:'pulse.caf',horn:'horn.caf',bell:'bell.caf',ring:'ring.caf',chime:'chime.caf',msg:'msg.caf'};
+// Превью звука при выборе в настройках: играем www/sounds/<key>.m4a ~3с (совпадает с пуш-.caf).
+var _sndPrevAudio=null,_sndPrevTimer=null;
+function _sndPreview(key){
+  try{
+    if(_sndPrevTimer){clearTimeout(_sndPrevTimer);_sndPrevTimer=null;}
+    if(_sndPrevAudio){try{_sndPrevAudio.pause();}catch(e){}_sndPrevAudio=null;}
+    var a=new Audio('sounds/'+(key||'default')+'.m4a'); a.volume=1.0; _sndPrevAudio=a;
+    var p=a.play(); if(p&&p.catch)p.catch(function(){});
+    _sndPrevTimer=setTimeout(function(){try{if(_sndPrevAudio){_sndPrevAudio.pause();_sndPrevAudio.currentTime=0;}}catch(e){}},3200);
+  }catch(e){}
+}
 function _sirenStart(){
   if(_sirT)return;
   try{
@@ -6215,7 +6292,7 @@ function _soSend(c){
   },function(){_soSending=false;toast('Не удалось отправить');});
   else _soSending=false;
 }
-let _soNewCol=SEC_COLORS[0],_soNewSnd='siren',_soCreateOpen=false,_soHistOpen=false,_soDraftT='',_soDraftB='';
+let _soNewCol=SEC_COLORS[0],_soNewSnd='siren',_soManageOpen=false,_soHistOpen=false,_soDraftT='',_soDraftB='';
 function renderSecOwn(){
   var el=document.getElementById('secOwnBody');if(!el)return;
   var _elT=document.getElementById('soTitle'),_elB=document.getElementById('soBody');
@@ -6226,7 +6303,9 @@ function renderSecOwn(){
     var col=c.col||'#e11d48';
     return '<span class="agst" data-sosend="'+i+'" style="border-color:'+col+'"><span style="width:9px;height:9px;border-radius:50%;background:'+col+';display:inline-block"></span> '+esc(c.t)+'</span>';
   }).join('')+'</div>';
-  html+='<div class="dphd" style="margin-top:8px">Команды</div>'+secCmds.map(function(c,i){
+  html+='<div class="dphd" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:8px">Настройка сигналов <button class="ctl" id="soManageToggle" style="flex:none;padding:5px 12px;margin:0">'+(_soManageOpen?'Свернуть':'Настроить')+'</button></div>';
+  if(_soManageOpen){
+  html+='<div class="di-s" style="margin:2px 0 6px;opacity:.7">Команды</div>'+secCmds.map(function(c,i){
     var col=c.col||'#e11d48';var link=base+'&code='+encodeURIComponent(c.c);
     return '<div class="dayitem" style="flex-direction:column;align-items:stretch;gap:8px">'
       +'<div style="display:flex;gap:9px;align-items:center"><span class="dot" style="background:'+col+';flex:none"></span><div style="flex:1;min-width:0"><div class="di-t">'+esc(c.t)+'</div><div class="di-s">'+esc(c.b||'')+'</div></div><button class="ctl" data-sosend2="'+i+'" style="flex:none">Отправить</button><button class="ctl" data-sodel="'+i+'" title="Удалить команду" style="flex:none;color:#e11d48;border-color:rgba(225,29,72,.55)">✕</button></div>'
@@ -6236,15 +6315,16 @@ function renderSecOwn(){
       +'<button class="ctl" data-socopy="'+i+'" style="width:100%">Скопировать ссылку</button>'
       +'</div>';
   }).join('');
-  html+='<div class="dphd" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between;gap:8px">Создание сигнала <button class="ctl" id="soCreateToggle" style="flex:none;padding:5px 12px;margin:0">'+(_soCreateOpen?'Свернуть':'＋ Создать')+'</button></div>';
-  if(_soCreateOpen){ html+='<div class="dayitem" style="flex-direction:column;align-items:stretch;gap:8px">'
+  html+='<div class="di-s" style="margin:16px 0 6px;opacity:.7">Новая команда</div>';
+  html+='<div class="dayitem" style="flex-direction:column;align-items:stretch;gap:8px">'
     +'<input id="soTitle" class="markin" placeholder="Название (например: Сбор)" maxlength="30" style="width:100%;box-sizing:border-box;margin-bottom:0">'
     +'<input id="soBody" class="markin" placeholder="Текст уведомления" maxlength="120" style="width:100%;box-sizing:border-box;margin-bottom:0">'
     +'<div style="display:flex;gap:7px;align-items:center"><span class="di-s">цвет:</span>'+SEC_COLORS.map(function(cc){return '<span data-sonewcol="'+cc+'" style="width:20px;height:20px;border-radius:50%;background:'+cc+';display:inline-block;cursor:pointer;border:2.5px solid '+(cc===_soNewCol?'#fff':'transparent')+'"></span>';}).join('')+'</div>'
     +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="di-s">звук:</span>'+SEC_SOUNDS.map(function(sn){return '<span class="agst'+(_soNewSnd===sn[0]?' on':'')+'" data-sonewsnd="'+sn[0]+'" style="padding:4px 10px">'+sn[1]+'</span>';}).join('')+'</div>'
     +'<button class="ctl" id="soAddBtn" style="width:100%">+ создать команду</button>'
     +'<div class="dayempty" style="padding:0">Ссылку вешайте на Кнопку действия или стук по крышке: «Команды» → «Получить содержимое URL»</div>'
-    +'</div>'; }
+    +'</div>';
+  }
   html+='<div class="dphd" style="margin-top:18px">📍 Кто на связи</div><div id="soLocOthers"></div>';
   html+='<div class="dphd" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:8px">История сигналов <button class="ctl" id="soHistToggle" style="flex:none;padding:5px 12px;margin:0">'+(_soHistOpen?'Скрыть':'Показать')+'</button></div>';
   if(_soHistOpen){ html+='<div id="soList"><div class="dayempty">Загружаю…</div></div>'; }
@@ -6266,10 +6346,10 @@ function renderSecOwn(){
   });});
   el.querySelectorAll('[data-sosnd]').forEach(function(b){b.addEventListener('click',function(){
     var pr=b.dataset.sosnd.split('|');var c=secCmds[+pr[0]];if(!c)return;
-    c.snd=pr[1];save();renderSecOwn();
+    c.snd=pr[1];_sndPreview(pr[1]);save();renderSecOwn();
   });});
   el.querySelectorAll('[data-sonewcol]').forEach(function(b){b.addEventListener('click',function(){_soNewCol=b.dataset.sonewcol;renderSecOwn();});});
-  el.querySelectorAll('[data-sonewsnd]').forEach(function(b){b.addEventListener('click',function(){_soNewSnd=b.dataset.sonewsnd;renderSecOwn();});});
+  el.querySelectorAll('[data-sonewsnd]').forEach(function(b){b.addEventListener('click',function(){_soNewSnd=b.dataset.sonewsnd;_sndPreview(b.dataset.sonewsnd);renderSecOwn();});});
   el.querySelectorAll('[data-socopy]').forEach(function(b){b.addEventListener('click',function(){
     var c=secCmds[+b.dataset.socopy];if(!c)return;
     var link=base+'&code='+encodeURIComponent(c.c);
@@ -6279,7 +6359,7 @@ function renderSecOwn(){
       else{var ta=document.createElement('textarea');ta.value=link;document.body.appendChild(ta);ta.select();var ok=document.execCommand('copy');document.body.removeChild(ta);done(ok);}
     }catch(e){done(false);}
   });});
-  var ct=document.getElementById('soCreateToggle');if(ct)ct.addEventListener('click',function(){_soCreateOpen=!_soCreateOpen;renderSecOwn();});
+  var ct=document.getElementById('soManageToggle');if(ct)ct.addEventListener('click',function(){_soManageOpen=!_soManageOpen;renderSecOwn();});
   var ht=document.getElementById('soHistToggle');if(ht)ht.addEventListener('click',function(){_soHistOpen=!_soHistOpen;renderSecOwn();});
   var ab=document.getElementById('soAddBtn');
   if(ab)ab.addEventListener('click',function(){
@@ -6827,6 +6907,40 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 /* v2.17: пульс активного сигнала и непросмотренных действий */
 @keyframes alivePulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.55}}
 .tlcard .dot.alive,.tlnew{animation:alivePulse 1.5s ease-in-out infinite}
+</style>
+<style>
+/* ═════ v2.68: живые пружинные нажатия ═════
+   Только transform (GPU-поток) — без layout/paint jank. Возврат после тапа с лёгким перелётом
+   (easeOutBack; на новых iOS — настоящий linear()-спринг), быстрый спад на нажатии.
+   prefers-reduced-motion гасит всё (см. блок в начале, стр.~257). */
+:root{ --tap-spring:cubic-bezier(.34,1.56,.5,1); }
+@supports (transition-timing-function:linear(0,1)){
+  :root{ --tap-spring:linear(0,.402 7.4%,.711 15.1%,.929 21%,1.008 24.4%,1.067 27.8%,1.088 31.2%,1.08 34.6%,1.03 43.2%,1.006 48.9%,.991 54.6%,.988 60.3%,.997 71.6%,1.003 84.5%,1); }
+}
+/* Иконки-кнопки шапки — раньше без отклика на тап */
+.ticon,.mapquick,.notifbell{ transition:transform .44s var(--tap-spring),border-color .15s ease,color .15s ease,background-color .15s ease; }
+.ticon:active,.mapquick:active,.notifbell:active{ transform:scale(.84); transition-duration:.1s,.15s,.15s,.15s; }
+/* Кнопки (учтена специфичность button.ctl/label.ctl из ранних блоков) */
+.ctl,button.ctl,label.ctl,.padd,button.padd{ transition:transform .44s var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
+.ctl:active,button.ctl:active,label.ctl:active,.padd:active,button.padd:active{ transform:scale(.93); transition-duration:.1s,.15s,.15s,.15s; }
+/* Чипы */
+.chip{ transition:transform .44s var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
+.chip:active{ transform:scale(.93); transition-duration:.1s,.15s,.15s,.15s; }
+/* Навигация: сайдбар и меню «Разделы» */
+.snrow{ transition:transform .4s var(--tap-spring),background-color .12s ease,border-color .12s ease; }
+.snrow:active{ transform:scale(.975); transition-duration:.1s,.12s,.12s; }
+.navrow{ transition:transform .4s var(--tap-spring); }
+.navrow:active{ transform:scale(.975); transition-duration:.1s; }
+/* Блоки-карточки и мелкие чипы */
+.ccard{ transition:transform .5s var(--tap-spring); }
+.ccard:active{ transform:scale(.97); transition-duration:.11s; }
+.projtog{ transition:transform .4s var(--tap-spring),opacity .15s ease,color .15s ease,border-color .15s ease; }
+.projtog:active{ transform:scale(.95); transition-duration:.1s,.15s,.15s,.15s; }
+.pmchip{ transition:transform .4s var(--tap-spring); }
+.pmchip:active{ transform:scale(.9); transition-duration:.1s; }
+/* Пикер времени: тумблер через transform вместо left (был layout-jank) */
+.jd-switch::after{ left:3px; transition:transform .2s var(--tap-spring); }
+.jd-switch.on::after{ left:3px; transform:translateX(20px); }
 </style>
 <style>
 /* ═════════ v2.01: ЕДИНАЯ ТИПОГРАФИКА ═════════

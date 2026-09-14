@@ -177,10 +177,66 @@
         this._recHist(pos.coords);
       }catch(e){}
     },
-    _watchId:null,_lastPush:0,_bgWatch:null,_hb:null,_lastCoords:null,_lastGood:null,_rej:0,_lastNet:0,
+    _watchId:null,_lastPush:0,_bgWatch:null,_hb:null,_lastCoords:null,_lastGood:null,_rej:0,_lastNet:0,_natKey:null,_liveMode:false,_liveChk:0,
     _bg:function(){ var C=window.Capacitor; return C&&C.Plugins&&C.Plugins.BackgroundGeolocation; },
+    _prefs:function(){ var C=window.Capacitor; return C&&C.Plugins&&C.Plugins.Preferences; },
+    _rand:function(){ try{ var a=new Uint8Array(32); (window.crypto||crypto).getRandomValues(a); return Array.prototype.map.call(a,function(b){return ('0'+b.toString(16)).slice(-2);}).join(''); }catch(e){ return 'k'+Date.now()+Math.random().toString(36).slice(2); } },
+    // Долгоживущий ключ устройства для НАТИВНОЙ отправки позиции при выгрузке приложения.
+    // Один ключ на пользователя (PK user_id): первое устройство создаёт, остальные читают тот же.
+    _ensureKey: async function(){
+      if(!currentUser)return null;
+      if(this._natKey)return this._natKey;
+      try{
+        var r=await client.from('locator_keys').select('key').eq('user_id',currentUser.id).maybeSingle();
+        var key=r&&r.data&&r.data.key;
+        if(!key){
+          key=this._rand();
+          var ins=await client.from('locator_keys').upsert({user_id:currentUser.id,key:key,updated_at:new Date().toISOString()},{onConflict:'user_id'}).select('key').maybeSingle();
+          if(ins&&ins.error){ var r2=await client.from('locator_keys').select('key').eq('user_id',currentUser.id).maybeSingle(); key=(r2&&r2.data&&r2.data.key)||key; } // гонка двух устройств
+        }
+        this._natKey=key; return key;
+      }catch(e){ return null; }
+    },
+    // Зеркалим key/url/on в нативное хранилище (Capacitor Preferences → UserDefaults),
+    // откуда AppDelegate читает их на пробуждении CoreLocation (даже после force-quit).
+    _mirrorNative: async function(on){
+      try{ var P=this._prefs(); if(!P)return;
+        if(on){
+          var key=await this._ensureKey(); if(!key)return;
+          var url=(window.SUPABASE_CONFIG&&window.SUPABASE_CONFIG.url)||'';
+          await P.set({key:'locator.key',value:String(key)});
+          await P.set({key:'locator.url',value:String(url)});
+          await P.set({key:'locator.on',value:'1'});
+        } else { await P.set({key:'locator.on',value:'0'}); }
+      }catch(e){}
+    },
+    // location-push токен (его выдаёт натив через startMonitoringLocationPushes, кладёт в Preferences).
+    // Грузим в location_push_tokens — по нему сервер шлёт location-пуш, будящий закрытое приложение.
+    _lastPushTok:null,
+    _uploadPushToken: async function(){
+      try{ var P=this._prefs(); if(!P||!currentUser)return;
+        var r=await P.get({key:'locator.pushtoken'}); var tok=r&&r.value;
+        if(!tok||this._lastPushTok===tok)return; this._lastPushTok=tok;
+        await client.from('location_push_tokens').upsert({user_id:currentUser.id,token:tok,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+      }catch(e){}
+    },
+    // Владелец, пока смотрит карту, зовёт это со списком видимых — сервер ставит им «живой режим».
+    reqLive: async function(targets){
+      try{ if(!currentUser||!targets||!targets.length)return;
+        var s=await client.auth.getSession(); var tok=s&&s.data&&s.data.session&&s.data.session.access_token; if(!tok)return;
+        var url=((window.SUPABASE_CONFIG&&window.SUPABASE_CONFIG.url)||'')+'/functions/v1/live-req';
+        await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({targets:targets})});
+      }catch(e){}
+    },
     _pushLoc:function(lat,lng,acc){
       try{ if(!currentUser)return;
+        // «Живой режим»: если за мной сейчас следят (владелец открыл карту) — пишем чаще (~2с), иначе 8с.
+        // Проверяем не чаще раза в 15с; работает и в фоне (натив зовёт _pushLoc на каждый фикс).
+        var _n0=Date.now();
+        if(_n0-(this._liveChk||0)>15000){ this._liveChk=_n0; var _self=this;
+          client.from('live_watch').select('until').eq('target_id',currentUser.id).maybeSingle().then(function(r){
+            var u=r&&r.data&&r.data.until; _self._liveMode=!!(u&&new Date(u).getTime()>Date.now());
+          },function(){}); }
         // РЭБ/GPS-спуфинг: отсекаем явный мусор и «телепорты», но НЕ замораживаем реально движущегося.
         if(acc!=null && acc>2000) return;                      // явный мусор (Wi-Fi/соты ~100-500м проходят)
         var now=Date.now(), lg=this._lastGood, teleport=false;
@@ -193,7 +249,7 @@
         this._rej=0;
         this._lastGood={lat:lat,lng:lng,t:now};
         this._lastCoords={lat:lat,lng:lng,acc:acc};
-        if(now-(this._lastPush||0)<8000)return; this._lastPush=now;
+        if(now-(this._lastPush||0)<(this._liveMode?2000:8000))return; this._lastPush=now;
         client.from('locations').upsert({user_id:currentUser.id,lat:lat,lng:lng,acc:acc,sharing:true,updated_at:new Date().toISOString()},{onConflict:'user_id'}).then(function(){});
         this._recHist({latitude:lat,longitude:lng,accuracy:acc});
       }catch(e){}
@@ -215,6 +271,8 @@
     start: async function(){
       var self=this; self._lastPush=0; self._lastGood=null; self._lastCoords=null; self._lastHist=null; self._rej=0; self._lastNet=0; // сброс кэша — heartbeat не опубликует старую/чужую точку
       try{localStorage.setItem('tb.locOn','1');}catch(e){} // запомнить — авто-возобновление при перезапуске
+      try{ self._mirrorNative(true); }catch(e){} // ключ+url в натив — чтобы натив слал позицию, когда приложение выгружено
+      try{ setTimeout(function(){ self._uploadPushToken(); },3500); }catch(e){} // location-push токен (натив регистрирует async)
       if(self._hb){clearInterval(self._hb);self._hb=null;}
       self._hb=setInterval(function(){ self._heartbeat(); },45000);
       // ФОНОВАЯ геолокация — обновляет позицию даже когда телефон заблокирован / приложение свёрнуто
@@ -253,6 +311,8 @@
     },
     stop: async function(){
       try{localStorage.removeItem('tb.locOn');}catch(e){} // выключили вручную — не возобновлять
+      try{ this._mirrorNative(false); }catch(e){} // натив тоже перестаёт слать (locator.on=0)
+      this._natKey=null;
       if(this._hb){clearInterval(this._hb);this._hb=null;}
       var BG=this._bg();
       if(this._bgWatch&&BG&&BG.removeWatcher){ try{await BG.removeWatcher({id:this._bgWatch});}catch(e){} this._bgWatch=null; }
