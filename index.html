@@ -3324,7 +3324,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.70';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.71';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -5683,7 +5683,7 @@ function _mapLoadNames(){
     var uid=johnAuth.user().id;
     johnAuth.client.from('team_links').select('owner_id,owner_email,member_id,member_email,role_label,status').eq('status','accepted').then(function(r){
       var m={};(r.data||[]).forEach(function(x){
-        if(x.member_id&&x.member_id!==uid)m[x.member_id]=x.role_label||((x.member_email||'').split('@')[0])||'Сотрудник';
+        if(x.member_id&&x.member_id!==uid)m[x.member_id]=((x.member_email||'').split('@')[0])||x.role_label||'Сотрудник'; // логин (до @), уникален — роли у охраны одинаковые
         if(x.owner_id&&x.owner_id!==uid)m[x.owner_id]=((x.owner_email||'').split('@')[0])||'Руководитель';
       });
       _mapNames=m;
@@ -5971,6 +5971,7 @@ function _locFmtAgo(ts){var d=Math.floor((Date.now()-ts)/60000);return d<1?'то
 function _locStatus(sharing,ts){ var live=(sharing!==false)&&(Date.now()-ts<150000);
   return {live:live, txt:(sharing===false?('не в сети · был(а) '+_locFmtAgo(ts)):(live?('на связи · '+_locFmtAgo(ts)):('нет связи · был(а) '+_locFmtAgo(ts))))}; }
 function _locBind(btnId,othersId){
+  try{_mapLoadNames();}catch(e){} // подгрузить логины участников (список «Кто на связи» подписывается ими)
   var b=document.getElementById(btnId);
   if(b&&!b._w){b._w=true;b.addEventListener('click',function(){
     var on=!b.classList.contains('on');b.classList.toggle('on',on);
@@ -5990,7 +5991,7 @@ function _locRenderOthers(othersId){
     if(!rows.length){el.innerHTML='<div class="dayempty">Пока никто не делится местоположением</div>';return;}
     el.innerHTML=rows.map(function(r){
       var t=new Date(r.updated_at).getTime();var st=_locStatus(r.sharing,t);var dc=st.live?'#16a34a':'#f59e0b';
-      return '<button type="button" class="dayitem locmapcard" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:'+dc+';flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>📍 Местоположение</span><span class="tlc-time">'+(st.live?'на связи':'нет связи')+' · '+_locFmtAgo(t)+'</span></div><div class="tlc-b">'+r.lat.toFixed(5)+', '+r.lng.toFixed(5)+' · открыть на карте ›</div></div></button>';
+      return '<button type="button" class="dayitem locmapcard" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:'+dc+';flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>📍 '+esc(_mapName(r.user_id))+'</span><span class="tlc-time">'+(st.live?'на связи':'нет связи')+' · '+_locFmtAgo(t)+'</span></div><div class="tlc-b">'+r.lat.toFixed(5)+', '+r.lng.toFixed(5)+' · открыть на карте ›</div></div></button>';
     }).join('');
     el.querySelectorAll('.locmapcard').forEach(function(b){b.addEventListener('click',function(){try{openLocMap();}catch(e){}});});
   });
