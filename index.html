@@ -258,6 +258,7 @@
 
   /* Календарь / Встречи */
   .cal{position:fixed;inset:0;background:var(--bg2);z-index:870;display:none;flex-direction:column}
+  #teamView{z-index:872}/* просмотр коллеги — ПОВЕРХ «Коллеги» (colView) и др. .cal; иначе открывался под ними и «не работал» */
   .cal.show{display:flex}
   .cal .chd{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px;border-bottom:1px solid var(--panel-line);position:sticky;top:0;background:var(--bg2);z-index:2}
   .cal .ctitle{font-weight:700;font-size:16px;margin-left:2px;margin-right:auto}
@@ -3324,7 +3325,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.71';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.72';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
