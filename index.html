@@ -941,7 +941,7 @@
 .chipbar .selbtn{width:auto;min-width:auto;text-align:center;border-radius:20px;padding:10px 16px}
 .chipbar .selbtn.empty{color:var(--muted)}
 .segbar{display:flex;gap:8px;margin:0 0 12px}
-.segbtn{flex:1;padding:11px;border-radius:12px;border:1px solid var(--panel-line);background:var(--bg2);color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+.segbtn{flex:1;padding:11px;border-radius:12px;border:1px solid var(--panel-line);background:var(--bg2);color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;transition:background-color .15s ease,color .15s ease,border-color .15s ease}
 .segbtn.on{background:var(--accent,#2f6df0);color:#fff;border-color:transparent}
 .chipbar .jdate-btn.jdate-empty .jdate-txt{color:var(--muted)}
 .tpanel{display:none;margin-top:12px;padding:12px;background:var(--card);border:1px solid var(--card-line);border-radius:14px;animation:tpIn .18s ease}
@@ -1132,7 +1132,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .pdstage.collapsed .pdstage-body{display:none}
 .pdtask{display:flex;align-items:flex-start;gap:11px;padding:10px 11px;background:var(--panel);border:1px solid var(--panel-line);border-radius:11px;margin-bottom:7px;cursor:pointer}
 .pdtask.over{border-color:rgba(225,29,72,.45)}
-.pdt-chk{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid #8a93a3;background:none;cursor:pointer;margin-top:1px;transition:.15s;position:relative;padding:0}
+.pdt-chk{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid #8a93a3;background:none;cursor:pointer;margin-top:1px;transition:border-color .15s ease,background-color .15s ease,transform .14s ease;position:relative;padding:0}
 .pdt-chk:active{transform:scale(.9)}
 .pdt-chk.on{background:#2fa37a;border-color:#2fa37a}
 .pdt-chk.on::after{content:'✓';position:absolute;inset:0;color:#fff;font-size:12px;line-height:18px;text-align:center;font-weight:700}
@@ -3325,7 +3325,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.73';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.74';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -6917,37 +6917,44 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 .tlcard .dot.alive,.tlnew{animation:alivePulse 1.5s ease-in-out infinite}
 </style>
 <style>
-/* ═════ v2.68: живые пружинные нажатия ═════
-   Только transform (GPU-поток) — без layout/paint jank. Возврат после тапа с лёгким перелётом
-   (easeOutBack; на новых iOS — настоящий linear()-спринг), быстрый спад на нажатии.
+/* ═════ v2.74: единая система нажатий ═════
+   Только transform (GPU-поток, без layout/paint jank). Пресс — БЫСТРЫЙ и НЕГЛУБОКИЙ,
+   возврат — с ЛЁГКИМ пружинным перелётом (~4%, было +9% и 0.44–0.5с = «резиновый»/корявый).
+   Одинаковые токены длительности/пружины на всех интерактивных поверхностях.
    prefers-reduced-motion гасит всё (см. блок в начале, стр.~257). */
-:root{ --tap-spring:cubic-bezier(.34,1.56,.5,1); }
-@supports (transition-timing-function:linear(0,1)){
-  :root{ --tap-spring:linear(0,.402 7.4%,.711 15.1%,.929 21%,1.008 24.4%,1.067 27.8%,1.088 31.2%,1.08 34.6%,1.03 43.2%,1.006 48.9%,.991 54.6%,.988 60.3%,.997 71.6%,1.003 84.5%,1); }
+:root{
+  --ease-out:cubic-bezier(.22,.61,.36,1);        /* плавное торможение — общие переходы */
+  --tap-spring:cubic-bezier(.33,1.15,.5,1);      /* деликатный перелёт ~3% (фолбэк iOS<17.2) */
+  --dur-press:.1s;                               /* пресс вниз — почти мгновенно */
+  --dur-tap:.28s;                                /* возврат с пружиной — снаппи, не «резина» */
 }
-/* Иконки-кнопки шапки — раньше без отклика на тап */
-.ticon,.mapquick,.notifbell{ transition:transform .44s var(--tap-spring),border-color .15s ease,color .15s ease,background-color .15s ease; }
-.ticon:active,.mapquick:active,.notifbell:active{ transform:scale(.84); transition-duration:.1s,.15s,.15s,.15s; }
+@supports (transition-timing-function:linear(0,1)){
+  /* Настоящая пружина на новых iOS: один мягкий перелёт до +4.3%, затем спокойное оседание. */
+  :root{ --tap-spring:linear(0, .35 5%, .68 11%, .92 17%, 1.02 22%, 1.043 27%, 1.038 33%, 1.02 40%, 1.005 50%, .998 65%, 1); }
+}
+/* Иконки-кнопки шапки (было ужатие до .84 — слишком глубоко) */
+.ticon,.mapquick,.notifbell{ transition:transform var(--dur-tap) var(--tap-spring),border-color .15s ease,color .15s ease,background-color .15s ease; }
+.ticon:active,.mapquick:active,.notifbell:active{ transform:scale(.9); transition-duration:var(--dur-press); }
 /* Кнопки (учтена специфичность button.ctl/label.ctl из ранних блоков) */
-.ctl,button.ctl,label.ctl,.padd,button.padd{ transition:transform .44s var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
-.ctl:active,button.ctl:active,label.ctl:active,.padd:active,button.padd:active{ transform:scale(.93); transition-duration:.1s,.15s,.15s,.15s; }
+.ctl,button.ctl,label.ctl,.padd,button.padd{ transition:transform var(--dur-tap) var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
+.ctl:active,button.ctl:active,label.ctl:active,.padd:active,button.padd:active{ transform:scale(.95); transition-duration:var(--dur-press); }
 /* Чипы */
-.chip{ transition:transform .44s var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
-.chip:active{ transform:scale(.93); transition-duration:.1s,.15s,.15s,.15s; }
+.chip{ transition:transform var(--dur-tap) var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease; }
+.chip:active{ transform:scale(.95); transition-duration:var(--dur-press); }
 /* Навигация: сайдбар и меню «Разделы» */
-.snrow{ transition:transform .4s var(--tap-spring),background-color .12s ease,border-color .12s ease; }
-.snrow:active{ transform:scale(.975); transition-duration:.1s,.12s,.12s; }
-.navrow{ transition:transform .4s var(--tap-spring); }
-.navrow:active{ transform:scale(.975); transition-duration:.1s; }
+.snrow{ transition:transform var(--dur-tap) var(--tap-spring),background-color .12s ease,border-color .12s ease; }
+.snrow:active{ transform:scale(.97); transition-duration:var(--dur-press); }
+.navrow{ transition:transform var(--dur-tap) var(--tap-spring); }
+.navrow:active{ transform:scale(.97); transition-duration:var(--dur-press); }
 /* Блоки-карточки и мелкие чипы */
-.ccard{ transition:transform .5s var(--tap-spring); }
-.ccard:active{ transform:scale(.97); transition-duration:.11s; }
-.projtog{ transition:transform .4s var(--tap-spring),opacity .15s ease,color .15s ease,border-color .15s ease; }
-.projtog:active{ transform:scale(.95); transition-duration:.1s,.15s,.15s,.15s; }
-.pmchip{ transition:transform .4s var(--tap-spring); }
-.pmchip:active{ transform:scale(.9); transition-duration:.1s; }
+.ccard{ transition:transform var(--dur-tap) var(--tap-spring); }
+.ccard:active{ transform:scale(.985); transition-duration:var(--dur-press); }
+.projtog{ transition:transform var(--dur-tap) var(--tap-spring),opacity .15s ease,color .15s ease,border-color .15s ease; }
+.projtog:active{ transform:scale(.95); transition-duration:var(--dur-press); }
+.pmchip{ transition:transform var(--dur-tap) var(--tap-spring); }
+.pmchip:active{ transform:scale(.93); transition-duration:var(--dur-press); }
 /* Пикер времени: тумблер через transform вместо left (был layout-jank) */
-.jd-switch::after{ left:3px; transition:transform .2s var(--tap-spring); }
+.jd-switch::after{ left:3px; transition:transform var(--dur-tap) var(--tap-spring); }
 .jd-switch.on::after{ left:3px; transform:translateX(20px); }
 </style>
 <style>
