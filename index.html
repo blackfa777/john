@@ -3325,7 +3325,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.72';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.73';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -6013,22 +6013,28 @@ function renderSecView(){
   try{ _locBind('secLocBtn','secLocOthers'); }catch(e){}
   try{
     var mb=document.getElementById('secMuteBtn');
-    if(mb&&window.johnAuth&&johnAuth.client&&johnAuth.user()){
-      var uidm=johnAuth.user().id;
+    if(mb){
       var BELL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
       var BELLOFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M22 9l-6 6"/><path d="M16 9l6 6"/></svg>';
       var syncMb=function(){mb.classList.toggle('muted',_secMuted);mb.innerHTML=_secMuted?BELLOFF:BELL;};
       syncMb();
-      johnAuth.client.from('sec_prefs').select('muted').eq('user_id',uidm).then(function(r){
-        _secMuted=!!(r.data&&r.data[0]&&r.data[0].muted);
-        syncMb();if(_secMuted)_sirenStop();
-      });
+      // Подтянуть актуальное «выходной» из БД, КОГДА сессия готова. На холодном старте охранника
+      // renderSecView может выполниться ДО восстановления сессии (johnAuth.user()===null) — тогда повторяем позже.
+      var _mbLoad=function(){try{var u=window.johnAuth&&johnAuth.client&&johnAuth.user&&johnAuth.user();if(!u)return false;johnAuth.client.from('sec_prefs').select('muted').eq('user_id',u.id).then(function(r){if(r&&!r.error){_secMuted=!!(r.data&&r.data[0]&&r.data[0].muted);syncMb();if(_secMuted)_sirenStop();}});return true;}catch(e){return false;}};
+      if(!_mbLoad())setTimeout(_mbLoad,2500);
+      // Клик привязываем БЕЗУСЛОВНО и один раз — не завися от готовности сессии на момент рендера.
+      // (Раньше привязка стояла внутри if(johnAuth.user()); у охранника, попадающего в secView до входа,
+      //  обработчик не навешивался и кнопка «выходной» оставалась немой весь сеанс.)
       if(!mb._w){mb._w=true;mb.addEventListener('click',function(){
-        var u=johnAuth.user&&johnAuth.user();if(!u)return;
-        _secMuted=!_secMuted;syncMb();
-        johnAuth.client.from('sec_prefs').upsert({user_id:u.id,muted:_secMuted,updated_at:new Date().toISOString()}).then(function(){});
-        toast(_secMuted?'🔕 Выходной: пуши и сирена отключены':'🔔 Звук включён');
-        if(_secMuted)_sirenStop();else _secLoadAlerts();
+        var u=window.johnAuth&&johnAuth.user&&johnAuth.user();
+        if(!u||!johnAuth.client){toast('Секунду — вхожу в аккаунт, повторите');return;}
+        var next=!_secMuted;
+        _secMuted=next;syncMb();
+        if(next)_sirenStop();else _secLoadAlerts();
+        johnAuth.client.from('sec_prefs').upsert({user_id:u.id,muted:next,updated_at:new Date().toISOString()},{onConflict:'user_id'}).then(function(r){
+          if(r&&r.error){_secMuted=!next;syncMb();toast('⚠️ Не удалось сохранить выходной — попробуйте ещё раз');}
+          else{toast(next?'🔕 Выходной: пуши и сирена отключены':'🔔 Звук включён');}
+        },function(){_secMuted=!next;syncMb();toast('⚠️ Нет связи — статус не сохранён');});
       });}
     }
   }catch(e){}
