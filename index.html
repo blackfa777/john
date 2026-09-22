@@ -889,6 +889,14 @@
   .bnode.shape-frame .bn-tx{font-weight:800;opacity:.85;font-size:.85em;text-transform:uppercase;letter-spacing:.5px}
   .bnode.filled{color:#fff}
   .bnode.btext{border:none !important;background:transparent !important;box-shadow:none;padding:4px 6px;font-weight:700;min-height:0;min-width:0}
+  /* v2.75: узел-человек из картотеки */
+  .bnode.bperson{padding:7px 13px 7px 7px;min-height:0;max-width:230px}
+  .bnode.bperson .bp-av{position:relative;width:2.5em;height:2.5em;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:.8em;letter-spacing:.3px;flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+  .bnode.bperson .bp-lv{position:absolute;right:-4px;bottom:-4px;min-width:1.25em;height:1.25em;padding:0 2px;border-radius:5px;background:#1c1c1c;color:#fff;font-size:.6em;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--panel);box-sizing:border-box}
+  .bnode.bperson .bp-main{display:flex;flex-direction:column;gap:1px;min-width:0;align-items:flex-start}
+  .bnode.bperson .bp-nm{font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  .bnode.bperson .bp-st{font-size:.7em;font-weight:700;letter-spacing:.2px;color:var(--muted);white-space:nowrap}
+  .bnode.bperson.gone{opacity:.55}
   .bstyle{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-soft);border:1px solid var(--panel-line);border-radius:9px;padding:8px 12px;background:transparent;cursor:pointer;-webkit-appearance:none}
   .bstyle.on{border-color:#2f6df0;color:#2f6df0}
   .bcstage{background-image:radial-gradient(circle, rgba(255,255,255,.05) 1px, transparent 1px);background-size:24px 24px}
@@ -1819,6 +1827,7 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
     <button class="bctool" id="bcAddText">+ текст</button>
     <button class="bctool" id="bcAddFrame">+ зона</button>
     <button class="bctool" id="bcAddIcon">+ иконка</button>
+    <button class="bctool" id="bcAddPerson">+ человек</button>
     <button class="bctool" id="bcConnect">связать</button>
     <button class="bctool" id="bcFit">по центру</button>
     <button class="bctool" id="bcZoomOut">−</button>
@@ -1845,6 +1854,9 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
   <div class="bicorow"><button class="bstyle" id="bnFillBtn"></button></div></div>
   <div id="bnSizeWrap"><label class="fieldlbl" style="margin-top:14px">Размер</label>
   <div class="bicorow" id="bnSizes"></div></div>
+  <div class="sheetrow" id="bnCardRow" style="display:none;margin-top:14px">
+    <button class="ctl" id="bnOpenCard" style="flex:1">Открыть карточку человека</button>
+  </div>
   <div class="sheetrow" style="display:flex;gap:10px;margin-top:18px">
     <button class="ctl" id="bnSave" style="flex:1">Сохранить</button>
     <button class="ctl" id="bnDup" style="flex:1">Дублировать</button>
@@ -3325,7 +3337,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.74';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.75';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -4738,6 +4750,7 @@ function bcDrawNodes(){
     const sel=(bcConnectFrom===n.id)?' sel':'';
     if(n.kind==='text'){return '<div class="bnode btext'+sel+'" data-node="'+n.id+'" style="left:'+n.x+'px;top:'+n.y+'px;color:'+(n.color||'#e8ebf0')+';font-size:'+(n.size||18)+'px"><span class="bn-rot">'+esc(n.text||'Текст')+'</span></div>';}
     if(n.kind==='icon'){const ici=BICONS[n.icon]||BICONS.star;return '<div class="bnode bicon'+sel+'" data-node="'+n.id+'" style="left:'+n.x+'px;top:'+n.y+'px;color:'+(n.color||'#2f6df0')+';font-size:'+(n.size||28)+'px"><span class="bn-rot biconwrap">'+ici+'</span></div>';}
+    if(n.kind==='person'){const p=people.find(x=>x.id===n.pid);const nm=p?p.nm:'(удалён)';const ptier=(p&&TIERS[p.t])||null;const pcol=n.color||(ptier&&ptier.color)||'#3a4150';const ini=p?_bpInitials(p.nm):'—';const lvl=(p&&p.t!=null)?String(p.t):'';const pst=(p&&p.status)?p.status:'';return '<div class="bnode bperson'+sel+(p?'':' gone')+'" data-node="'+n.id+'" style="left:'+n.x+'px;top:'+n.y+'px;font-size:'+(n.size||16)+'px"><span class="bn-rot"><span class="bp-av" style="background:'+pcol+'">'+esc(ini)+(lvl!==''?'<span class="bp-lv">'+esc(lvl)+'</span>':'')+'</span><span class="bp-main"><span class="bp-nm">'+esc(nm)+'</span>'+(pst?'<span class="bp-st">'+esc(pst)+'</span>':'')+'</span></span></div>';}
     const ic=BICONS[n.icon]||'';const shape=n.shape||'rect';const col=n.color||'#3a4150';
     let style='left:'+n.x+'px;top:'+n.y+'px;font-size:'+(n.size||16)+'px;border-color:'+col+(n.fill?(';background:'+col):'');
     if(shape==='frame'&&!n.fill)style+=';background:'+col+'1c';
@@ -4760,28 +4773,31 @@ function onNodeTap(id){
 function onEdgeTap(id){bEdgeId=id;renderEdgeStyleRow();bOpenSheet('bEdgeSheet');}
 function openNodeEditor(id){
   bEditNode=curBoard.nodes.find(n=>n.id===id);if(!bEditNode)return;
-  const k=bEditNode.kind||'block';const isText=k==='text',isIcon=k==='icon';
+  const k=bEditNode.kind||'block';const isText=k==='text',isIcon=k==='icon',isPerson=k==='person';
   document.getElementById('bnText').value=bEditNode.text||'';
-  document.getElementById('bnText').style.display=isIcon?'none':'';
-  const h=document.querySelector('#bNodeSheet h3');if(h)h.textContent=isText?'Текст':(isIcon?'Иконка':'Блок');
+  document.getElementById('bnText').style.display=(isIcon||isPerson)?'none':'';
+  const h=document.querySelector('#bNodeSheet h3');if(h)h.textContent=isText?'Текст':(isIcon?'Иконка':(isPerson?'Человек':'Блок'));
   renderNodeColorRow();
-  document.getElementById('bnIconWrap').style.display=isText?'none':'';
-  document.getElementById('bnShapeWrap').style.display=(isText||isIcon)?'none':'';
-  document.getElementById('bnFillWrap').style.display=(isText||isIcon)?'none':'';
+  document.getElementById('bnIconWrap').style.display=(isText||isPerson)?'none':'';
+  document.getElementById('bnShapeWrap').style.display=(isText||isIcon||isPerson)?'none':'';
+  document.getElementById('bnFillWrap').style.display=(isText||isIcon||isPerson)?'none':'';
   document.getElementById('bnSizeWrap').style.display='';
   renderNodeSizeRow();
-  if(!isText&&!isIcon){renderNodeIconRow();renderNodeShapeRow();renderNodeFill();}
+  var cardRow=document.getElementById('bnCardRow');if(cardRow)cardRow.style.display=isPerson?'flex':'none';
+  if(!isText&&!isIcon&&!isPerson){renderNodeIconRow();renderNodeShapeRow();renderNodeFill();}
   else if(isIcon){renderNodeIconRow();}
   bOpenSheet('bNodeSheet');
 }
 function renderNodeColorRow(){const row=document.getElementById('bnColors');row.innerHTML=BCOLORS.map(c=>'<button class="bcol'+(bEditNode&&bEditNode.color===c?' on':'')+'" data-bc="'+c+'" style="background:'+c+'"></button>').join('');row.querySelectorAll('[data-bc]').forEach(b=>b.addEventListener('click',()=>{if(bEditNode){bEditNode.color=b.dataset.bc;renderNodeColorRow();}}));}
 function renderNodeIconRow(){const row=document.getElementById('bnIcons');row.innerHTML=BICON_ORDER.map(k=>'<button class="bico'+(bEditNode&&bEditNode.icon===k?' on':'')+'" data-bi="'+k+'">'+(k==='none'?'<span style=\"font-size:10px;font-weight:600\">нет</span>':BICONS[k])+'</button>').join('');row.querySelectorAll('[data-bi]').forEach(b=>b.addEventListener('click',()=>{if(bEditNode){bEditNode.icon=b.dataset.bi;renderNodeIconRow();}}));}
-function saveNodeEdit(){if(!bEditNode)return;const t=document.getElementById('bnText').value.trim();bEditNode.text=t||'Блок';save();closeBoardSheets();backdrop.classList.remove('show');bcRender();}
+function saveNodeEdit(){if(!bEditNode)return;if(bEditNode.kind!=='person'){const t=document.getElementById('bnText').value.trim();bEditNode.text=t||'Блок';}save();closeBoardSheets();backdrop.classList.remove('show');bcRender();}
 function deleteNodeEdit(){if(!bEditNode||!curBoard)return;const id=bEditNode.id;curBoard.nodes=curBoard.nodes.filter(n=>n.id!==id);curBoard.edges=(curBoard.edges||[]).filter(e=>e.from!==id&&e.to!==id);bEditNode=null;save();closeBoardSheets();backdrop.classList.remove('show');bcRender();toast('Блок удалён');}
 function bcAddNode(){if(!curBoard)return;const wrap=document.getElementById('bcWrap');const r=wrap.getBoundingClientRect();const cx=Math.round((r.width/2-bcOff.x)/bcScale-60+(Math.random()*30-15));const cy=Math.round((r.height/2-bcOff.y)/bcScale-30+(Math.random()*30-15));const n={id:nid(),x:cx,y:cy,text:'Блок',color:BCOLORS[0],icon:'none',shape:'rect',fill:false,kind:'block',size:16};curBoard.nodes.push(n);save();bcRender();openNodeEditor(n.id);}
 function bcAddIcon(){if(!curBoard)return;const wrap=document.getElementById('bcWrap');const r=wrap.getBoundingClientRect();const cx=Math.round((r.width/2-bcOff.x)/bcScale-16+(Math.random()*30-15));const cy=Math.round((r.height/2-bcOff.y)/bcScale-16+(Math.random()*30-15));const n={id:nid(),x:cx,y:cy,icon:'star',color:'#2f6df0',kind:'icon',size:28};curBoard.nodes.push(n);save();bcRender();openNodeEditor(n.id);}
 function bcAddFrame(){if(!curBoard)return;const wrap=document.getElementById('bcWrap');const r=wrap.getBoundingClientRect();const cx=Math.round((r.width/2-bcOff.x)/bcScale-120);const cy=Math.round((r.height/2-bcOff.y)/bcScale-80);const n={id:nid(),x:cx,y:cy,text:'Зона',color:BCOLORS[7],icon:'none',shape:'frame',fill:false,kind:'block',size:15};curBoard.nodes.push(n);save();bcRender();openNodeEditor(n.id);}
 function bcAddText(){if(!curBoard)return;const wrap=document.getElementById('bcWrap');const r=wrap.getBoundingClientRect();const cx=Math.round((r.width/2-bcOff.x)/bcScale-30+(Math.random()*30-15));const cy=Math.round((r.height/2-bcOff.y)/bcScale-12+(Math.random()*30-15));const n={id:nid(),x:cx,y:cy,text:'Текст',color:'#e8ebf0',kind:'text',size:18};curBoard.nodes.push(n);save();bcRender();openNodeEditor(n.id);}
+function _bpInitials(nm){return String(nm||'').trim().split(/\s+/).slice(0,2).map(w=>Array.from(w)[0]||'').join('').toUpperCase()||'?';}
+function bcAddPerson(){if(!curBoard)return;if(!people.length){toast('Сначала добавьте людей в картотеку');return;}openPersonPick(function(pid){if(!curBoard)return;const wrap=document.getElementById('bcWrap');const r=wrap.getBoundingClientRect();const cx=Math.round((r.width/2-bcOff.x)/bcScale-70+(Math.random()*30-15));const cy=Math.round((r.height/2-bcOff.y)/bcScale-24+(Math.random()*30-15));const n={id:nid(),x:cx,y:cy,kind:'person',pid:pid,size:16};curBoard.nodes.push(n);save();bcRender();toast('Человек добавлен на схему');},null,null,'Добавить человека на схему');}
 function renderNodeShapeRow(){const row=document.getElementById('bnShapes');if(!row)return;const shapes=[['rect','прямоуг.'],['pill','скругл.'],['circle','круг'],['diamond','ромб'],['note','заметка'],['hex','шестиуг.'],['frame','зона']];const cur=(bEditNode&&bEditNode.shape)||'rect';row.innerHTML=shapes.map(o=>'<button class="bstyle'+(cur===o[0]?' on':'')+'" data-bsh="'+o[0]+'">'+o[1]+'</button>').join('');row.querySelectorAll('[data-bsh]').forEach(b=>b.addEventListener('click',()=>{if(bEditNode){bEditNode.shape=b.dataset.bsh;renderNodeShapeRow();bcRender();}}));}
 function renderNodeFill(){const b=document.getElementById('bnFillBtn');if(!b)return;b.textContent=(bEditNode&&bEditNode.fill)?'залитый':'контур';b.classList.toggle('on',!!(bEditNode&&bEditNode.fill));b.onclick=()=>{if(bEditNode){bEditNode.fill=!bEditNode.fill;renderNodeFill();bcRender();}};}
 function renderNodeSizeRow(){const row=document.getElementById('bnSizes');if(!row)return;const k=(bEditNode&&bEditNode.kind)||'block';let sizes,def;if(k==='text'){sizes=[['14','S'],['18','M'],['24','L'],['32','XL']];def=18;}else if(k==='icon'){sizes=[['20','S'],['28','M'],['40','L'],['56','XL']];def=28;}else{sizes=[['13','S'],['16','M'],['20','L'],['26','XL']];def=16;}const cur=String((bEditNode&&bEditNode.size)||def);row.innerHTML=sizes.map(o=>'<button class="bstyle'+(cur===o[0]?' on':'')+'" data-bsz="'+o[0]+'">'+o[1]+'</button>').join('');row.querySelectorAll('[data-bsz]').forEach(b=>b.addEventListener('click',()=>{if(bEditNode){bEditNode.size=parseInt(b.dataset.bsz);renderNodeSizeRow();bcRender();}}));}
@@ -4803,12 +4819,14 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
   if(g('bcAddFrame'))g('bcAddFrame').addEventListener('click',bcAddFrame);
   if(g('bcAddText'))g('bcAddText').addEventListener('click',bcAddText);
   if(g('bcAddIcon'))g('bcAddIcon').addEventListener('click',bcAddIcon);
+  if(g('bcAddPerson'))g('bcAddPerson').addEventListener('click',bcAddPerson);
   if(g('bcConnect'))g('bcConnect').addEventListener('click',()=>{bcConnectMode=!bcConnectMode;bcConnectFrom=null;syncConnectBtn();bcRender();});
   if(g('bcFit'))g('bcFit').addEventListener('click',bcFit);
   if(g('bcZoomIn'))g('bcZoomIn').addEventListener('click',()=>bcZoom(1.2));
   if(g('bcZoomOut'))g('bcZoomOut').addEventListener('click',()=>bcZoom(1/1.2));
   if(g('bnSave'))g('bnSave').addEventListener('click',saveNodeEdit);
   if(g('bnDup'))g('bnDup').addEventListener('click',bcDupNode);
+  if(g('bnOpenCard'))g('bnOpenCard').addEventListener('click',function(){if(!bEditNode||bEditNode.kind!=='person')return;var p=people.find(x=>x.id===bEditNode.pid);closeBoardSheets();backdrop.classList.remove('show');if(p){openDetail(p);}else{toast('Человек удалён из картотеки');}});
   if(g('bnCancel'))g('bnCancel').addEventListener('click',()=>{closeBoardSheets();backdrop.classList.remove('show');});
   if(g('bnDelete'))g('bnDelete').addEventListener('click',deleteNodeEdit);
   if(g('bNameSave'))g('bNameSave').addEventListener('click',saveBoardName);
