@@ -856,6 +856,8 @@
   .bcnodes{position:absolute;left:0;top:0}
   .bnode{position:absolute;min-width:80px;max-width:200px;width:max-content;min-height:46px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:10px 13px;border:2px solid #3a4150;border-radius:13px;background:var(--panel);color:#e8ebf0;font-size:14px;font-weight:600;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;box-shadow:0 5px 16px rgba(0,0,0,.28)}
   .bnode.sel{outline:2px solid #2f6df0;outline-offset:2px}
+  .bnode.bsel{outline:2.5px solid #2f6df0 !important;outline-offset:2px;box-shadow:0 0 0 4px rgba(47,109,240,.18)}
+  .bcmarquee{position:absolute;display:none;border:1.5px dashed #2f6df0;background:rgba(47,109,240,.10);border-radius:4px;z-index:5;pointer-events:none}
   .bn-ico{flex:none;display:flex}.bn-ico svg{width:1.3em;height:1.3em}
   .bnode.bicon{border:none !important;background:transparent !important;box-shadow:none;padding:4px;min-width:0;min-height:0}
   .biconwrap{display:flex}.biconwrap svg{width:1em;height:1em}
@@ -1829,6 +1831,7 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
     <button class="bctool" id="bcAddIcon">+ иконка</button>
     <button class="bctool" id="bcAddPerson">+ человек</button>
     <button class="bctool" id="bcConnect">связать</button>
+    <button class="bctool" id="bcSelect">выделить</button>
     <button class="bctool" id="bcFit">по центру</button>
     <button class="bctool" id="bcZoomOut">−</button>
     <button class="bctool" id="bcZoomIn">+</button>
@@ -1837,6 +1840,7 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
     <div class="bcstage" id="bcStage">
       <svg class="bcsvg" id="bcSvg"></svg>
       <div class="bcnodes" id="bcNodes"></div>
+      <div class="bcmarquee" id="bcMarquee"></div>
     </div>
     <div class="bchint" id="bcHint"></div>
   </div>
@@ -2357,7 +2361,7 @@ let people=[];
 
 const STORE_KEY="trustboard.v4";
 let boards=[],_bseq=1;
-let curBoard=null,bcOff={x:0,y:0},bcScale=1,bcConnectMode=false,bcConnectFrom=null,bEditNode=null,bEdgeId=null,bNameTargetId=null;
+let curBoard=null,bcOff={x:0,y:0},bcScale=1,bcConnectMode=false,bcConnectFrom=null,bEditNode=null,bEdgeId=null,bNameTargetId=null,bcSelectMode=false,bcSel=new Set();
 
 function seed(){
   projects=SEED_PROJ.map(([nm,sh,col])=>({id:pid(),nm,sh,col}));
@@ -3120,7 +3124,7 @@ function refreshDetail(){
   try{_detailLayout(card);}catch(e){}
   detailInner.innerHTML='';detailInner.appendChild(card);
 }
-function closeDetail(){detailEl.classList.remove('show');detailPerson=null;unlockScroll();if(returnToGraph){returnToGraph=false;document.getElementById('graphView').classList.add('show');lockScroll();}if(returnToProj){const pjid=returnToProj;returnToProj=null;document.getElementById('projView').classList.add('show');openProjDetail(pjid);lockScroll();}if(returnToCal){const k=returnToCal;returnToCal=null;calSelKey=k;document.getElementById('cal').classList.add('show');lockScroll();renderCal();}}
+function closeDetail(){detailEl.classList.remove('show');detailPerson=null;unlockScroll();if(returnToGraph){returnToGraph=false;document.getElementById('graphView').classList.add('show');lockScroll();}if(returnToProj){const pjid=returnToProj;returnToProj=null;document.getElementById('projView').classList.add('show');openProjDetail(pjid);lockScroll();}if(returnToCal){const k=returnToCal;returnToCal=null;calSelKey=k;document.getElementById('cal').classList.add('show');lockScroll();renderCal();}if(returnToBoard){const bid=returnToBoard;returnToBoard=null;try{openBoard(bid);}catch(e){}}}
 document.getElementById('detailBack').addEventListener('click',closeDetail);
 
 
@@ -3337,7 +3341,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.75';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.76';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -4206,7 +4210,7 @@ function setGraphFocus(id){
 document.getElementById('grOpen').addEventListener('click',()=>{if(grFocus){const t=people.find(x=>x.id===grFocus);if(t){returnToGraph=true;closeGraph();openDetail(t);}}});
 function closeGraph(){document.getElementById('graphView').classList.remove('show');unlockScroll();}
 // ---------- вкладка Проекты ----------
-let projDetailId=null,projEditMode=null,projEditDel=false,returnToProj=null,returnToCal=null,projEditParent=null,pdShowDone=false;
+let projDetailId=null,projEditMode=null,projEditDel=false,returnToProj=null,returnToCal=null,returnToBoard=null,projEditParent=null,pdShowDone=false;
 function plMembers(t){const u=t%10,h=t%100;let w;if(h>=11&&h<=14)w='участников';else if(u===1)w='участник';else if(u>=2&&u<=4)w='участника';else w='участников';return t+' '+w;}
 function openProjects(){currentView='proj';renderProjGrid();document.getElementById('projView').classList.add('show');lockScroll();}
 function closeProjects(){document.getElementById('projView').classList.remove('show');unlockScroll();}
@@ -4734,9 +4738,10 @@ function bcRendersList(){
   wrap.querySelectorAll('[data-board]').forEach(b=>b.addEventListener('click',()=>openBoard(b.dataset.board)));
 }
 function createBoard(){const b={id:bid(),nm:'Новая схема',nodes:[],edges:[],at:Date.now()};boards.push(b);save();openBoard(b.id);renameBoard(b.id);}
-function openBoard(id){curBoard=boards.find(b=>b.id===id);if(!curBoard)return;currentView='boardCanvas';bcOff={x:0,y:0};bcScale=1;bcConnectMode=false;bcConnectFrom=null;document.getElementById('bcTitle').textContent=curBoard.nm;document.getElementById('boardsView').classList.remove('show');document.getElementById('boardCanvas').classList.add('show');lockScroll();syncConnectBtn();bcFit();}
+function openBoard(id){curBoard=boards.find(b=>b.id===id);if(!curBoard)return;currentView='boardCanvas';bcOff={x:0,y:0};bcScale=1;bcConnectMode=false;bcConnectFrom=null;bcSelectMode=false;bcSel=new Set();document.getElementById('bcTitle').textContent=curBoard.nm;document.getElementById('boardsView').classList.remove('show');document.getElementById('boardCanvas').classList.add('show');lockScroll();syncConnectBtn();syncSelectBtn();bcFit();}
 function closeBoard(){document.getElementById('boardCanvas').classList.remove('show');curBoard=null;openBoards();}
 function syncConnectBtn(){const b=document.getElementById('bcConnect');if(b)b.classList.toggle('on',bcConnectMode);}
+function syncSelectBtn(){const b=document.getElementById('bcSelect');if(b)b.classList.toggle('on',bcSelectMode);}
 function bcNodeSize(n){const el=document.querySelector('.bnode[data-node="'+n.id+'"]');return el?{w:el.offsetWidth,h:el.offsetHeight}:{w:120,h:50};}
 function bcDrawEdges(){
   const svg=document.getElementById('bcSvg');if(!svg||!curBoard)return;
@@ -4758,10 +4763,11 @@ function bcDrawNodes(){
     const icoCol=n.fill?'#fff':col;
     return '<div class="bnode shape-'+shape+(n.fill?' filled':'')+sel+'" data-node="'+n.id+'" style="'+style+'"><span class="bn-rot">'+(ic?'<span class="bn-ico" style="color:'+icoCol+'">'+ic+'</span>':'')+'<span class="bn-tx">'+esc(n.text||'')+'</span></span></div>';
   }).join('');
+  if(bcSel&&bcSel.size)wrap.querySelectorAll('.bnode').forEach(el=>{if(bcSel.has(el.dataset.node))el.classList.add('bsel');});
 }
 function bcApplyTransform(){const st=document.getElementById('bcStage');if(st)st.style.transform='translate('+bcOff.x+'px,'+bcOff.y+'px) scale('+bcScale+')';}
 function bcZoom(f){if(!curBoard)return;const R=document.getElementById('bcWrap').getBoundingClientRect();const cx=R.width/2,cy=R.height/2;const sp={x:(cx-bcOff.x)/bcScale,y:(cy-bcOff.y)/bcScale};let ns=Math.max(0.3,Math.min(3,bcScale*f));bcScale=ns;bcOff.x=cx-ns*sp.x;bcOff.y=cy-ns*sp.y;bcApplyTransform();}
-function bcRender(){if(!curBoard)return;bcApplyTransform();bcDrawNodes();bcDrawEdges();const h=document.getElementById('bcHint');if(h)h.textContent=bcConnectMode?(bcConnectFrom?'Тапни второй блок — появится стрелка':'Связывание: тапни первый блок'):((curBoard.nodes||[]).length?'':'Нажми «+ блок», чтобы добавить');}
+function bcRender(){if(!curBoard)return;bcApplyTransform();bcDrawNodes();bcDrawEdges();const h=document.getElementById('bcHint');if(h)h.textContent=bcSelectMode?(bcSel.size?(bcSel.size+' выделено — тащите за любой, чтобы двигать вместе'):'Обведите блоки рамкой, чтобы выделить и двигать вместе'):(bcConnectMode?(bcConnectFrom?'Тапни второй блок — появится стрелка':'Связывание: тапни первый блок'):((curBoard.nodes||[]).length?'':'Нажми «+ блок», чтобы добавить'));}
 function onNodeTap(id){
   if(!curBoard)return;
   if(bcConnectMode){
@@ -4820,13 +4826,14 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
   if(g('bcAddText'))g('bcAddText').addEventListener('click',bcAddText);
   if(g('bcAddIcon'))g('bcAddIcon').addEventListener('click',bcAddIcon);
   if(g('bcAddPerson'))g('bcAddPerson').addEventListener('click',bcAddPerson);
-  if(g('bcConnect'))g('bcConnect').addEventListener('click',()=>{bcConnectMode=!bcConnectMode;bcConnectFrom=null;syncConnectBtn();bcRender();});
+  if(g('bcConnect'))g('bcConnect').addEventListener('click',()=>{bcConnectMode=!bcConnectMode;bcConnectFrom=null;if(bcConnectMode){bcSelectMode=false;bcSel=new Set();syncSelectBtn();}syncConnectBtn();bcRender();});
+  if(g('bcSelect'))g('bcSelect').addEventListener('click',()=>{bcSelectMode=!bcSelectMode;if(bcSelectMode){bcConnectMode=false;bcConnectFrom=null;syncConnectBtn();}else{bcSel=new Set();}syncSelectBtn();bcRender();});
   if(g('bcFit'))g('bcFit').addEventListener('click',bcFit);
   if(g('bcZoomIn'))g('bcZoomIn').addEventListener('click',()=>bcZoom(1.2));
   if(g('bcZoomOut'))g('bcZoomOut').addEventListener('click',()=>bcZoom(1/1.2));
   if(g('bnSave'))g('bnSave').addEventListener('click',saveNodeEdit);
   if(g('bnDup'))g('bnDup').addEventListener('click',bcDupNode);
-  if(g('bnOpenCard'))g('bnOpenCard').addEventListener('click',function(){if(!bEditNode||bEditNode.kind!=='person')return;var p=people.find(x=>x.id===bEditNode.pid);closeBoardSheets();backdrop.classList.remove('show');if(p){openDetail(p);}else{toast('Человек удалён из картотеки');}});
+  if(g('bnOpenCard'))g('bnOpenCard').addEventListener('click',function(){if(!bEditNode||bEditNode.kind!=='person')return;var p=people.find(x=>x.id===bEditNode.pid);closeBoardSheets();backdrop.classList.remove('show');if(!p){toast('Человек удалён из картотеки');return;}returnToBoard=curBoard?curBoard.id:null;document.getElementById('boardCanvas').classList.remove('show');openDetail(p);});
   if(g('bnCancel'))g('bnCancel').addEventListener('click',()=>{closeBoardSheets();backdrop.classList.remove('show');});
   if(g('bnDelete'))g('bnDelete').addEventListener('click',deleteNodeEdit);
   if(g('bNameSave'))g('bNameSave').addEventListener('click',saveBoardName);
@@ -4840,6 +4847,7 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
   const wrap=g('bcWrap');if(!wrap)return;
   const pts=new Map();let pinch=null;
   let mode=null,dragNode=null,dragEl=null,sx=0,sy=0,onx=0,ony=0,oox=0,ooy=0,moved=0,dN=null,dE=null;
+  let marqStart=null,grp=null,grpStart=null;const marqEl=()=>document.getElementById('bcMarquee');
   function wrect(){return wrap.getBoundingClientRect();}
   wrap.addEventListener('pointerdown',e=>{
     if(!curBoard)return;
@@ -4848,6 +4856,11 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
     if(pts.size===2){if(dragEl)dragEl.style.cursor='grab';mode=null;dragNode=null;dragEl=null;const a=[...pts.values()];const R=wrect();const d0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1;const m0={x:(a[0].x+a[1].x)/2-R.left,y:(a[0].y+a[1].y)/2-R.top};pinch={d0,m0,s0:bcScale,o0:{x:bcOff.x,y:bcOff.y}};return;}
     const ne=e.target.closest('.bnode'),ee=e.target.closest('[data-edge]');
     sx=e.clientX;sy=e.clientY;moved=0;dN=ne?ne.dataset.node:null;dE=ee?ee.dataset.edge:null;
+    if(bcSelectMode){
+      if(ne){grp=bcSel.has(dN)?Array.from(bcSel):[dN];mode=bcSel.has(dN)?'multidrag':'selnode';grpStart={};grp.forEach(id=>{const n=curBoard.nodes.find(x=>x.id===id);if(n)grpStart[id]={x:n.x,y:n.y};});}
+      else{mode='marquee';const R=wrect();marqStart={x:(sx-R.left-bcOff.x)/bcScale,y:(sy-R.top-bcOff.y)/bcScale};const me=marqEl();if(me){me.style.display='block';me.style.left=marqStart.x+'px';me.style.top=marqStart.y+'px';me.style.width='0px';me.style.height='0px';}}
+      return;
+    }
     if(ne&&!bcConnectMode){const n=curBoard.nodes.find(x=>x.id===dN);if(n){mode='node';dragNode=n;dragEl=ne;onx=n.x;ony=n.y;ne.style.cursor='grabbing';}}
     else if(ne&&bcConnectMode){mode='tapnode';}
     else if(ee){mode='tapedge';}
@@ -4856,6 +4869,8 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
   wrap.addEventListener('pointermove',e=>{
     if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pinch&&pts.size>=2){const a=[...pts.values()];const R=wrect();const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1;const m={x:(a[0].x+a[1].x)/2-R.left,y:(a[0].y+a[1].y)/2-R.top};let ns=pinch.s0*(d/pinch.d0);ns=Math.max(0.3,Math.min(3,ns));const sp={x:(pinch.m0.x-pinch.o0.x)/pinch.s0,y:(pinch.m0.y-pinch.o0.y)/pinch.s0};bcScale=ns;bcOff.x=m.x-ns*sp.x;bcOff.y=m.y-ns*sp.y;bcApplyTransform();return;}
+    if(mode==='marquee'){const R=wrect();moved=Math.max(moved,Math.abs(e.clientX-sx)+Math.abs(e.clientY-sy));const cx=(e.clientX-R.left-bcOff.x)/bcScale,cy=(e.clientY-R.top-bcOff.y)/bcScale;const x0=Math.min(marqStart.x,cx),y0=Math.min(marqStart.y,cy),w=Math.abs(cx-marqStart.x),h=Math.abs(cy-marqStart.y);const me=marqEl();if(me){me.style.left=x0+'px';me.style.top=y0+'px';me.style.width=w+'px';me.style.height=h+'px';}bcSel=new Set();(curBoard.nodes||[]).forEach(n=>{const s=bcNodeSize(n);if(n.x<x0+w&&n.x+s.w>x0&&n.y<y0+h&&n.y+s.h>y0)bcSel.add(n.id);});document.querySelectorAll('#bcNodes .bnode').forEach(el=>el.classList.toggle('bsel',bcSel.has(el.dataset.node)));return;}
+    if(mode==='multidrag'||mode==='selnode'){const dx=e.clientX-sx,dy=e.clientY-sy;moved=Math.max(moved,Math.abs(dx)+Math.abs(dy));if(moved>4&&grp){grp.forEach(id=>{const n=curBoard.nodes.find(x=>x.id===id);if(n&&grpStart[id]){n.x=Math.round(grpStart[id].x+dx/bcScale);n.y=Math.round(grpStart[id].y+dy/bcScale);const el=document.querySelector('.bnode[data-node="'+id+'"]');if(el){el.style.left=n.x+'px';el.style.top=n.y+'px';}}});bcDrawEdges();}return;}
     if(!mode)return;const dx=e.clientX-sx,dy=e.clientY-sy;moved=Math.max(moved,Math.abs(dx)+Math.abs(dy));
     if(mode==='node'&&dragNode){dragNode.x=Math.round(onx+dx/bcScale);dragNode.y=Math.round(ony+dy/bcScale);if(dragEl){dragEl.style.left=dragNode.x+'px';dragEl.style.top=dragNode.y+'px';}bcDrawEdges();}
     else if(mode==='pan'){bcOff.x=oox+dx;bcOff.y=ooy+dy;bcApplyTransform();}
@@ -4864,6 +4879,8 @@ function deleteCurBoard(){if(!curBoard)return;const id=curBoard.id;boards=boards
     pts.delete(e.pointerId);
     if(pinch){if(pts.size<2){pinch=null;save();}mode=null;dragNode=null;dragEl=null;if(dragEl)dragEl.style.cursor='grab';return;}
     if(dragEl)dragEl.style.cursor='grab';
+    if(mode==='marquee'){const me=marqEl();if(me)me.style.display='none';if(moved<8)bcSel=new Set();marqStart=null;mode=null;bcRender();return;}
+    if(mode==='multidrag'||mode==='selnode'){const tp=moved<8;if(tp){if(bcSel.has(dN))bcSel.delete(dN);else bcSel.add(dN);}else{if(mode==='selnode')bcSel=new Set(grp);save();}grp=null;grpStart=null;mode=null;bcRender();return;}
     const tap=moved<8;
     if(mode==='node'){if(tap)onNodeTap(dN);else save();}else if(mode==='tapnode'&&tap)onNodeTap(dN);else if(mode==='tapedge'&&tap)onEdgeTap(dE);
     mode=null;dragNode=null;dragEl=null;
@@ -5315,7 +5332,7 @@ try{if(window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App){Capacitor.Plu
   function syncSN(){var v=currentView;sn.querySelectorAll('[data-snav]').forEach(function(r){var k=r.dataset.snav;r.classList.toggle('on',k===v||(k==='people'&&(v==='home'||v==='people'))||(k==='boards'&&v==='boardCanvas'));});}
   window.syncSidenav=syncSN;
   sn.querySelectorAll('[data-snav]').forEach(function(b){b.addEventListener('click',function(){var n=b.dataset.snav;
-    try{returnToGraph=false;returnToProj=null;returnToCal=null;closeDetail();}catch(e){}
+    try{returnToGraph=false;returnToProj=null;returnToCal=null;returnToBoard=null;closeDetail();}catch(e){}
     closeAllSheets();goHome();
     if(n==='cal')openCal();else if(n==='agenda')openAgenda();else if(n==='graph')openGraph();else if(n==='proj')openProjects();else if(n==='boards')openBoards();else if(n==='colleagues')openColleagues();else if(n==='secown')openSecOwn();else if(n==='analytics')openAnalytics();else if(n==='people')currentView='people';syncSN();});});
   var s1=document.getElementById('snSettings');if(s1)s1.addEventListener('click',openSettings);
@@ -6677,6 +6694,8 @@ function _ckRender(q){
   /* контент правее сайдбара */
   body{padding-left:var(--sidew)}
   .cal,.detail,.ppick{left:var(--sidew)}
+  /* пикер людей на десктопе — компактная колонка слева, а не во всю ширину */
+  .ppick .ppsearch,.ppick .pplist{max-width:620px}
   /* гамбургеры не нужны — навигация всегда слева */
   #navBtn,#calBack,#mvBack,#tvBack,#pvBack,#bvBack,#grBack,#soBack,#colBack,#secBack,#setBurger{display:none}
   /* Календарь и Дела и встречи: сетка слева, панель дня справа */
