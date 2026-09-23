@@ -2077,6 +2077,7 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
       <div class="srow tog"><span class="sic" style="background:#2f6df022;color:#2f6df0">📇</span><span class="stx"><span class="slb">Подробные карточки</span><span class="sds">больше деталей в картотеке</span></span><button class="sw" id="denseBtn" role="switch" aria-label="Подробные карточки"></button></div>
       <div class="srow tog"><span class="sic" style="background:#2fa37a22;color:#2fa37a">🗂</span><span class="stx"><span class="slb">Дела из проектов</span><span class="sds">показывать в календаре и агенде</span></span><button class="sw" id="setProjTog" role="switch" aria-label="Дела из проектов"></button></div>
       <button class="srow act" id="filterSetBtn"><span class="sic" style="background:#2fa37a22;color:#2fa37a">🔎</span><span class="stx"><span class="slb">Фильтр людей</span><span class="sds">кого показывать в картотеке</span></span><span class="schev">›</span></button>
+      <button class="srow act" id="statusesBtn"><span class="sic" style="background:#7c3aed22;color:#7c3aed">🏷</span><span class="stx"><span class="slb">Статусы людей</span><span class="sds">добавить, переименовать, удалить</span></span><span class="schev">›</span></button>
       <button class="srow act" id="sumBtn"><span class="sic" style="background:#e0a72e22;color:#e0a72e">📊</span><span class="stx"><span class="slb">Сводка</span><span class="sds">обзор по картотеке</span></span><span class="schev">›</span></button>
     </div>
     <div class="set-group" data-sec="notif">
@@ -2155,6 +2156,16 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
   <div class="who" id="statusWho"></div>
   <div id="statusRows"></div>
   <button class="done ghost" id="statusClear">Убрать статус</button>
+</div>
+<div class="sheet" id="statusesSheet">
+  <h3>Статусы людей</h3>
+  <div class="who">переименование обновит статус у всех, у кого он стоит</div>
+  <div id="stmRows"></div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <input id="stmNew" class="markin" type="text" maxlength="24" placeholder="Новый статус" style="flex:1;margin:0">
+    <button class="ctl" id="stmAdd">Добавить</button>
+  </div>
+  <button class="done" id="stmDone" style="margin-top:12px">Готово</button>
 </div>
 <div class="sheet" id="bornSheet">
   <h3>Дата рождения</h3>
@@ -2416,7 +2427,7 @@ function load(){
       _sseq=d.sseq||_seqFrom(spheres);_scolor=d.scolor||spheres.length;
       _cseq=d.cseq||_seqFrom(coproj);_ccolor=d.ccolor||coproj.length;
       if(d.ui){ui.dense=d.ui.dense!==false;ui.sort=d.ui.sort||'name';ui.remNight=d.ui.remNight!==false;ui.remMorning=d.ui.remMorning!==false;ui.notifSeen=d.ui.notifSeen||0;ui.lockResume=d.ui.lockResume!==false;}
-      secCmds=Array.isArray(d.secCmds)?d.secCmds:[];secKey=d.secKey||'';
+      secCmds=Array.isArray(d.secCmds)?d.secCmds:[];secKey=d.secKey||'';STATUSES=Array.isArray(d.statuses)?d.statuses.slice():DEFAULT_STATUSES.slice();
       sumLog=Array.isArray(d.sumLog)?d.sumLog:[];
       if(!d.clr1){people.forEach(p=>p.proj=[]);}
       migratePeople();
@@ -2426,7 +2437,7 @@ function load(){
 }
 var _lastSaved=null,_quotaWarned=false;
 function save(){
-  var s;try{s=JSON.stringify({projects,spheres,coproj,people,seq:_seq,pseq:_pseq,pcolor:_pcolor,sseq:_sseq,scolor:_scolor,cseq:_cseq,ccolor:_ccolor,ui:{dense:ui.dense,sort:ui.sort,remNight:ui.remNight,remMorning:ui.remMorning,notifSeen:ui.notifSeen,lockResume:ui.lockResume},sumLog,meetings,mseq:_mseq,tasks,tseq:_tseq,taskLog,boards,bseq:_bseq,secCmds,secKey,clr1:1});}catch(e){return;}
+  var s;try{s=JSON.stringify({projects,spheres,coproj,people,seq:_seq,pseq:_pseq,pcolor:_pcolor,sseq:_sseq,scolor:_scolor,cseq:_cseq,ccolor:_ccolor,ui:{dense:ui.dense,sort:ui.sort,remNight:ui.remNight,remMorning:ui.remMorning,notifSeen:ui.notifSeen,lockResume:ui.lockResume},sumLog,meetings,mseq:_mseq,tasks,tseq:_tseq,taskLog,boards,bseq:_bseq,secCmds,secKey,statuses:STATUSES,clr1:1});}catch(e){return;}
   if(_lastSaved===null){try{_lastSaved=localStorage.getItem(STORE_KEY);}catch(e){}}
   if(s===_lastSaved)return false; // ничего не менялось — не трогаем хранилище, синк и уведомления
   try{localStorage.setItem(STORE_KEY,s);_lastSaved=s;try{localStorage.setItem('tb.dirty','1');}catch(_){}}
@@ -2731,7 +2742,7 @@ document.getElementById('noteSave').addEventListener('click',()=>{
 document.getElementById('noteClear').addEventListener('click',()=>{
   if(!notePerson)return;notePerson.ai=null;touch(notePerson);closeNote();renderAll();toast("Комментарий очищен");
 });
-function closeAllSheets(){closeSheet();closeMark();closeLife();closeCo();closeTier();closeNote();closeKey();closePaste();closeFilter();closeTodo();closeHist();closeSum();closeSumHist();closeKnown();closeBorn();closeStatus();closeMeet();closeMeetDone();closePersonPick();closeSrc();closeLink();closeGift();closeCoRole();closeProjGeo();closeProjHist();closeTaskSheet();closeTaskHist();closeNotif();closeCmdK();closePriv();closePNote();closeTeamSheet();closeGa();closeTlEdit();closeNav();closeEventType();closeBoardSheets();}
+function closeAllSheets(){closeSheet();closeMark();closeLife();closeCo();closeTier();closeNote();closeKey();closePaste();closeFilter();closeTodo();closeHist();closeSum();closeSumHist();closeKnown();closeBorn();closeStatus();closeMeet();closeMeetDone();closePersonPick();closeSrc();closeLink();closeGift();closeCoRole();closeProjGeo();closeProjHist();closeTaskSheet();closeTaskHist();closeNotif();closeCmdK();closePriv();closePNote();closeTeamSheet();closeGa();closeTlEdit();closeNav();closeEventType();closeBoardSheets();closeStatusesMgr();}
 // дата рождения
 const bornSheet=document.getElementById('bornSheet'),bornInput=document.getElementById('bornInput'),bornWho=document.getElementById('bornWho');
 let bornPerson=null;
@@ -2740,7 +2751,8 @@ function closeBorn(){backdrop.classList.remove('show');bornSheet.classList.remov
 document.getElementById('bornSave').addEventListener('click',()=>{if(!bornPerson)return;const v=bornInput.value;bornPerson.born=v||null;touch(bornPerson);closeBorn();renderAll();});
 document.getElementById('bornClear').addEventListener('click',()=>{if(!bornPerson)return;bornPerson.born=null;touch(bornPerson);closeBorn();renderAll();});
 // статус
-const STATUSES=["CN BF","CN B","CN S","CN LA","CN LEO","CN ST"];
+const DEFAULT_STATUSES=["CN BF","CN B","CN S","CN LA","CN LEO","CN ST"];
+let STATUSES=DEFAULT_STATUSES.slice(); // v2.77: редактируемые, хранятся в app_state под ключом statuses
 const statusSheet=document.getElementById('statusSheet'),statusWho=document.getElementById('statusWho'),statusRows=document.getElementById('statusRows');
 let statusPerson=null;
 function openStatus(p){closeAllSheets();statusPerson=p;statusWho.textContent=p.nm;statusRows.innerHTML='';
@@ -2751,6 +2763,76 @@ function openStatus(p){closeAllSheets();statusPerson=p;statusWho.textContent=p.n
   backdrop.classList.add('show');statusSheet.classList.add('show');}
 function closeStatus(){backdrop.classList.remove('show');statusSheet.classList.remove('show');statusPerson=null;}
 document.getElementById('statusClear').addEventListener('click',()=>{if(statusPerson){statusPerson.status=null;touch(statusPerson);}closeStatus();renderAll();});
+// ===== Менеджер статусов людей (v2.77): добавить / переименовать (обновляет у всех) / удалить (спрашивает, если стоит у людей) / порядок =====
+const statusesSheet=document.getElementById('statusesSheet'),stmRows=document.getElementById('stmRows');
+let _stmEdit=null,_stmConf=null;
+function _stmCount(st){return people.filter(p=>p.status===st).length;}
+function _stmNorm(v){return String(v||'').trim().replace(/\s+/g,' ');}
+function renderStatusesMgr(){
+  stmRows.innerHTML='';
+  if(!STATUSES.length){stmRows.innerHTML='<div class="dayempty" style="padding:10px 2px">Статусов нет — добавьте ниже</div>';}
+  STATUSES.forEach((st,i)=>{
+    const row=document.createElement('div');row.className='stm-row';const n=_stmCount(st);
+    if(_stmEdit===i){
+      row.innerHTML='<input class="markin stm-in" id="stmEditIn" type="text" maxlength="24" value="'+esc(st)+'" style="margin:0"><button class="stm-b ok" data-stmok="'+i+'" title="Сохранить">✓</button><button class="stm-b" data-stmcancel="1" title="Отмена">✕</button>';
+    } else if(_stmConf===i){
+      row.innerHTML='<span class="stm-conf">«'+esc(st)+'» стоит у '+n+' '+_plu(n,'человека','человек','человек')+'. Снять у них и удалить?</span><button class="stm-b del" data-stmdel2="'+i+'">Да</button><button class="stm-b" data-stmcancel="1" title="Отмена">✕</button>';
+    } else {
+      row.innerHTML='<span class="stm-nm">'+esc(st)+(n?' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+n+'</span>':'')+'</span>'
+        +'<button class="stm-b" data-stmup="'+i+'" title="Выше"'+(i===0?' disabled style="opacity:.35"':'')+'>↑</button>'
+        +'<button class="stm-b" data-stmdown="'+i+'" title="Ниже"'+(i===STATUSES.length-1?' disabled style="opacity:.35"':'')+'>↓</button>'
+        +'<button class="stm-b" data-stmedit="'+i+'" title="Переименовать">✎</button>'
+        +'<button class="stm-b del" data-stmdel="'+i+'" title="Удалить">✕</button>';
+    }
+    stmRows.appendChild(row);
+  });
+  if(_stmEdit!==null){const inp=document.getElementById('stmEditIn');if(inp){setTimeout(()=>{try{inp.focus();inp.select();}catch(e){}},30);inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();_stmCommitRename(_stmEdit);}else if(e.key==='Escape'){_stmEdit=null;renderStatusesMgr();}});}}
+}
+function _stmCommitRename(i){
+  const inp=document.getElementById('stmEditIn');if(!inp)return;
+  const nv=_stmNorm(inp.value),old=STATUSES[i];
+  if(!nv){toast('Название пустое');return;}
+  if(nv!==old&&STATUSES.some((s,j)=>j!==i&&s===nv)){toast('Такой статус уже есть');return;}
+  if(nv!==old){
+    STATUSES[i]=nv;
+    people.forEach(p=>{if(p.status===old){p.status=nv;touch(p);}});
+    try{if(ui.fl&&Array.isArray(ui.fl.status))ui.fl.status=ui.fl.status.map(s=>s===old?nv:s);}catch(e){}
+    save();renderAll();try{syncFilterBtn();}catch(e){}
+    toast('Статус переименован');
+  }
+  _stmEdit=null;renderStatusesMgr();
+}
+function _stmDelete(i){
+  const st=STATUSES[i];
+  people.forEach(p=>{if(p.status===st){p.status=null;touch(p);}});
+  STATUSES.splice(i,1);
+  try{if(ui.fl&&Array.isArray(ui.fl.status))ui.fl.status=ui.fl.status.filter(s=>s!==st);}catch(e){}
+  _stmConf=null;_stmEdit=null;
+  save();renderAll();try{syncFilterBtn();}catch(e){}
+  renderStatusesMgr();toast('Статус удалён');
+}
+stmRows.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t||t.disabled)return;
+  if(t.dataset.stmedit!=null){_stmEdit=+t.dataset.stmedit;_stmConf=null;renderStatusesMgr();return;}
+  if(t.dataset.stmok!=null){_stmCommitRename(+t.dataset.stmok);return;}
+  if(t.dataset.stmcancel!=null){_stmEdit=null;_stmConf=null;renderStatusesMgr();return;}
+  if(t.dataset.stmdel!=null){const i=+t.dataset.stmdel;if(_stmCount(STATUSES[i])>0){_stmConf=i;_stmEdit=null;renderStatusesMgr();}else{_stmDelete(i);}return;}
+  if(t.dataset.stmdel2!=null){_stmDelete(+t.dataset.stmdel2);return;}
+  if(t.dataset.stmup!=null){const i=+t.dataset.stmup;if(i>0){[STATUSES[i-1],STATUSES[i]]=[STATUSES[i],STATUSES[i-1]];save();renderStatusesMgr();}return;}
+  if(t.dataset.stmdown!=null){const i=+t.dataset.stmdown;if(i<STATUSES.length-1){[STATUSES[i],STATUSES[i+1]]=[STATUSES[i+1],STATUSES[i]];save();renderStatusesMgr();}return;}
+});
+function _stmAdd(){
+  const inp=document.getElementById('stmNew');const nv=_stmNorm(inp.value);
+  if(!nv){toast('Введите название');return;}
+  if(STATUSES.includes(nv)){toast('Такой статус уже есть');return;}
+  STATUSES.push(nv);inp.value='';save();renderStatusesMgr();toast('Статус добавлен');
+}
+document.getElementById('stmAdd').addEventListener('click',_stmAdd);
+document.getElementById('stmNew').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();_stmAdd();}});
+function openStatusesMgr(){closeAllSheets();_stmEdit=null;_stmConf=null;renderStatusesMgr();backdrop.classList.add('show');statusesSheet.classList.add('show');}
+function closeStatusesMgr(){backdrop.classList.remove('show');statusesSheet.classList.remove('show');_stmEdit=null;_stmConf=null;}
+document.getElementById('stmDone').addEventListener('click',closeStatusesMgr);
+document.getElementById('statusesBtn').addEventListener('click',openStatusesMgr);
 // сколько знакомы
 const knownSheet=document.getElementById('knownSheet'),knownInput=document.getElementById('knownInput'),knownWho=document.getElementById('knownWho');
 let knownPerson=null;
@@ -3154,7 +3236,7 @@ function openSheet(p){
   backdrop.classList.add('show');sheet.classList.add('show');
 }
 function closeSheet(){backdrop.classList.remove('show');sheet.classList.remove('show');sheetPerson=null;}
-backdrop.addEventListener('click',()=>{closeSheet();closeMark();closeConfirm();closeLife();closeTier();closeCo();closeFilter();closeNote();closePaste();closeKey();closeTodo();closeHist();closeSum();closeSumHist();closeKnown();closeBorn();closeStatus();closeMeet();closeMeetDone();closePersonPick();closeSrc();closeLink();closeGift();closeCoRole();closeProjGeo();closeProjHist();closeTaskSheet();closeTaskHist();closeNotif();closeCmdK();closePriv();closePNote();closeTeamSheet();closeGa();closeTlEdit();closeNav();});
+backdrop.addEventListener('click',()=>{closeSheet();closeMark();closeConfirm();closeLife();closeTier();closeCo();closeFilter();closeNote();closePaste();closeKey();closeTodo();closeHist();closeSum();closeSumHist();closeKnown();closeBorn();closeStatus();closeMeet();closeMeetDone();closePersonPick();closeSrc();closeLink();closeGift();closeCoRole();closeProjGeo();closeProjHist();closeTaskSheet();closeTaskHist();closeNotif();closeCmdK();closePriv();closePNote();closeTeamSheet();closeGa();closeTlEdit();closeNav();closeStatusesMgr();});
 document.getElementById('sheetDone').addEventListener('click',closeSheet);
 
 // create project from inside the person sheet
@@ -3341,7 +3423,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.76';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.77';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -3377,7 +3459,7 @@ document.getElementById('filterDone').addEventListener('click',closeFilter);
 document.getElementById('filterClear').addEventListener('click',()=>{ui.fl={lvl:[],life:[],proj:[],co:[],biz:[],score:[],has:[],status:[],attn:false,mm:false,broken:false};fltOpen=null;openFilter();renderBoard();syncFilterBtn();});
 
 // ---------- backup ----------
-function exportData(){return JSON.stringify({projects,spheres,coproj,people,seq:_seq,pseq:_pseq,pcolor:_pcolor,sseq:_sseq,scolor:_scolor,cseq:_cseq,ccolor:_ccolor,ui:{dense:ui.dense,sort:ui.sort},sumLog,meetings,mseq:_mseq,tasks,tseq:_tseq,taskLog,boards,bseq:_bseq},null,2);}
+function exportData(){return JSON.stringify({projects,spheres,coproj,people,seq:_seq,pseq:_pseq,pcolor:_pcolor,sseq:_sseq,scolor:_scolor,cseq:_cseq,ccolor:_ccolor,ui:{dense:ui.dense,sort:ui.sort},sumLog,meetings,mseq:_mseq,tasks,tseq:_tseq,taskLog,boards,bseq:_bseq,statuses:STATUSES},null,2);}
 function applyImport(d){
   if(!(d&&d.people&&d.projects))return false;
   projects=d.projects;people=d.people;
@@ -3389,7 +3471,7 @@ function applyImport(d){
   _seq=d.seq||_seqFrom(people);_pseq=d.pseq||_seqFrom(projects);_pcolor=d.pcolor||projects.length;
   _sseq=d.sseq||_seqFrom(spheres);_scolor=d.scolor||spheres.length;_cseq=d.cseq||_seqFrom(coproj);_ccolor=d.ccolor||coproj.length;
   if(d.ui){ui.dense=d.ui.dense!==false;ui.sort=d.ui.sort||'name';ui.remNight=d.ui.remNight!==false;ui.remMorning=d.ui.remMorning!==false;ui.notifSeen=d.ui.notifSeen||0;ui.lockResume=d.ui.lockResume!==false;}
-  secCmds=Array.isArray(d.secCmds)?d.secCmds:[];secKey=d.secKey||'';
+  secCmds=Array.isArray(d.secCmds)?d.secCmds:[];secKey=d.secKey||'';STATUSES=Array.isArray(d.statuses)?d.statuses.slice():DEFAULT_STATUSES.slice();
   sumLog=Array.isArray(d.sumLog)?d.sumLog:[];
   syncDenseBtn();if(sortSel)sortSel.value=ui.sort;renderAll();save();return true;
 }
@@ -6952,6 +7034,16 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 /* v2.17: пульс активного сигнала и непросмотренных действий */
 @keyframes alivePulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.55}}
 .tlcard .dot.alive,.tlnew{animation:alivePulse 1.5s ease-in-out infinite}
+</style>
+<style>
+/* v2.77: менеджер статусов людей (шторка #statusesSheet) */
+.stm-row{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--panel-line);border-radius:9px;margin-bottom:7px}
+.stm-nm{flex:1;font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stm-in{flex:1;min-width:0}
+.stm-b{flex:none;min-width:32px;height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--panel-line);background:var(--bg2);color:inherit;cursor:pointer;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;font-family:var(--sans)}
+.stm-b.del{color:#e11d48}
+.stm-b.ok{background:#2f6df0;border-color:#2f6df0;color:#fff}
+.stm-conf{font-size:12.5px;color:var(--muted);flex:1;min-width:0;line-height:1.35}
 </style>
 <style>
 /* ═════ v2.74: единая система нажатий ═════
