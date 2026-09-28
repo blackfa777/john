@@ -2859,6 +2859,8 @@ function _shiftMonthKeys(y,m){var a=new Date(y,m-1,1),b=new Date(y,m+2,0);return
 async function _shiftsFetch(y,m,ownerId){var db=_shiftDb();if(!db||!ownerId)return;var k=_shiftMonthKeys(y,m);var r=await db.from('sec_shifts').select('id,owner_id,guard_id,guard_name,day,created_by').eq('owner_id',ownerId).gte('day',k[0]).lte('day',k[1]);if(r.error)throw r.error;Object.keys(_shiftByDay).forEach(function(d){if(d>=k[0]&&d<=k[1])delete _shiftByDay[d];});(r.data||[]).forEach(function(row){(_shiftByDay[row.day]=_shiftByDay[row.day]||[]).push(row);});}
 // из renderCal (владелец): один раз на видимый месяц — охранники + смены, затем перерисовать
 function _shiftsEnsure(y,m){var uid=_shiftUid();if(!uid)return;var mk=y+'-'+m;if(_shiftLoaded[mk])return;_shiftLoaded[mk]=1;_shiftGuardsLoad().then(function(g){if(!g||!g.length)return;return _shiftsFetch(y,m,uid).then(function(){try{if(document.getElementById('cal').classList.contains('show')&&calY===y&&calM===m)renderCal();}catch(e){}});}).catch(function(e){delete _shiftLoaded[mk];});}
+// имена на смене в ячейке календаря владельца (v2.80): телефон — 1 имя «+N», десктоп — до 3 столбиком
+function _calShiftHtml(key,wide){var rows=_shiftByDay[key]||[];if(!rows.length)return '';wide=!!wide;var max=wide?3:1;var show=rows.slice(0,max),more=rows.length-show.length;return '<div class="calsh">'+show.map(function(r){return '<span class="calshn">'+esc(r.guard_name||'?')+'</span>';}).join('')+(more>0?'<span class="calshn more">+'+more+'</span>':'')+'</div>';}
 // тап по чипу в панели дня: поставить/снять смену (оптимистично, с откатом по ошибке)
 async function _shiftToggle(day,gid,gname){var db=_shiftDb(),uid=_shiftUid();if(!db||!uid||_shiftBusy)return;_shiftBusy=true;var rows=_shiftByDay[day]||[],cur=rows.find(function(r){return r.guard_id===gid;});try{if(cur){var d=await db.from('sec_shifts').delete().eq('id',cur.id);if(d.error)throw d.error;_shiftByDay[day]=rows.filter(function(r){return r.id!==cur.id;});}else{var ins=await db.from('sec_shifts').insert({owner_id:uid,guard_id:gid,guard_name:gname,day:day}).select('id,owner_id,guard_id,guard_name,day,created_by').maybeSingle();if(ins.error)throw ins.error;if(ins.data)(_shiftByDay[day]=_shiftByDay[day]||[]).push(ins.data);}}catch(e){toast('Не удалось сохранить смену');}_shiftBusy=false;renderCal();}
 // ---- экран «График работы» (#secCalView): только смены, ничего больше. Открывается из secView (охрана) и secOwnView (владелец) ----
@@ -3459,7 +3461,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.79';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.80';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -4057,7 +4059,7 @@ function renderCal(){
   try{_shiftsEnsure(calY,calM);}catch(e){}
   document.getElementById('calHistBtn').classList.toggle('on',calHist);
   const map=eventsForMonth(calY,calM);
-  const grid=document.getElementById('calGrid');grid.innerHTML='';
+  const grid=document.getElementById('calGrid');grid.innerHTML='';const _shWide=(grid.getBoundingClientRect().width/7)>=80;grid.classList.toggle('shwide',_shWide);
   _WD.forEach(w=>{const e=document.createElement('div');e.className='calwd';e.textContent=w;grid.appendChild(e);});
   const lead=(new Date(calY,calM,1).getDay()+6)%7;
   const dim=new Date(calY,calM+1,0).getDate();
@@ -4071,9 +4073,9 @@ function renderCal(){
   for(let i=0;i<lead;i++){const e=document.createElement('div');e.className='calcell empty';grid.appendChild(e);}
   for(let d=1;d<=dim;d++){const key=dkey(calY,calM,d),evs=map[key]||[];
     const cell=document.createElement('div');cell.className='calcell'+(key===tkey?' today':'')+(key===calSelKey?' sel':'');
-    const cols=[...new Set(evs.map(x=>x.color).concat(_hmap[key]||[]).concat((_shiftByDay[key]&&_shiftByDay[key].length)?[SHIFT_COLOR]:[]))].slice(0,4);
+    const cols=[...new Set(evs.map(x=>x.color).concat(_hmap[key]||[]))].slice(0,4);
     const _hol=getHolidays(calY,calM,d);const _main=_holMain(_hol);
-    cell.innerHTML='<div class="dn">'+d+(_main?'<span class="holflag">'+_main.f+'</span>':'')+'</div><div class="dots">'+cols.map(c=>'<span class="dot" style="background:'+c+'"></span>').join('')+'</div>';
+    cell.innerHTML='<div class="dn">'+d+(_main?'<span class="holflag">'+_main.f+'</span>':'')+'</div>'+_calShiftHtml(key,_shWide)+'<div class="dots">'+cols.map(c=>'<span class="dot" style="background:'+c+'"></span>').join('')+'</div>';
     cell.addEventListener('click',()=>{calSelKey=key;calOverdueMode=false;syncCalOverdueBtn();const _p=grid.querySelector('.calcell.sel');if(_p)_p.classList.remove('sel');cell.classList.add('sel');renderDayPanel(map);});
     grid.appendChild(cell);
   }
@@ -7100,6 +7102,14 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 #scDay{padding:8px 14px 24px}
 .scmine{display:block;width:100%;margin-top:10px;text-align:center}
 .scmine.on{background:#0ea5e9;border-color:#0ea5e9;color:#fff}
+/* v2.80: имена на смене в ячейке календаря владельца */
+.calcell .calsh{display:flex;flex-wrap:nowrap;align-items:baseline;gap:2px;margin-top:1px;min-width:0;max-width:100%;overflow:hidden}
+.calcell .calshn{font-size:9px;line-height:1.15;font-weight:700;color:#0ea5e9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.calcell .calshn.more{flex:none;opacity:.85;font-size:8.5px}
+.calcell.sel .calshn{color:#fff}
+body.light .calcell .calshn{color:#0369a1}
+body.light .calcell.sel .calshn{color:#fff}
+.calgrid.shwide .calsh{flex-direction:column;align-items:stretch;gap:1px}.calgrid.shwide .calshn{font-size:10.5px}
 /* v2.77: менеджер статусов людей (шторка #statusesSheet) */
 .stm-row{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--panel-line);border-radius:9px;margin-bottom:7px}
 .stm-nm{flex:1;font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
