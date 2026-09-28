@@ -1589,6 +1589,17 @@ body:not(.light) .mvitem:active,body:not(.light) .dayitem:active,body:not(.light
   </div>
   <div class="cbody" id="secBody"><div class="dayempty" style="padding:30px 4px">Загружаю…</div></div>
 </div>
+<div class="cal" id="secCalView">
+  <div class="chd">
+    <button class="dback" id="scBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>назад</button>
+    <div class="ctitle">График работы</div>
+  </div>
+  <div class="scbody">
+    <div class="scnav"><button class="ctl" id="scPrev">‹</button><div class="sclabel" id="scLabel"></div><button class="ctl" id="scNext">›</button><button class="ctl" id="scToday">Сегодня</button></div>
+    <div class="scgrid" id="scGrid"></div>
+    <div id="scDay"></div>
+  </div>
+</div>
 <div class="cal" id="secOwnView">
   <div class="chd">
     <button class="ticon" id="soBack" title="Меню" aria-label="Меню"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
@@ -2833,6 +2844,30 @@ function openStatusesMgr(){closeAllSheets();_stmEdit=null;_stmConf=null;renderSt
 function closeStatusesMgr(){backdrop.classList.remove('show');statusesSheet.classList.remove('show');_stmEdit=null;_stmConf=null;}
 document.getElementById('stmDone').addEventListener('click',closeStatusesMgr);
 document.getElementById('statusesBtn').addEventListener('click',openStatusesMgr);
+// ===== График работы СБ (v2.78): смена = «кто работает в этот день», без часов. Таблица sec_shifts (owner all / members read). =====
+let _shiftByDay={},_shiftGuards=null,_shiftOwnerId=null,_shiftLoaded={},_shiftBusy=false;
+const SHIFT_COLOR='#0ea5e9';
+function _shiftUid(){try{return (window.johnAuth&&johnAuth.user&&johnAuth.user())?johnAuth.user().id:null;}catch(e){return null;}}
+function _shiftDb(){try{return (window.johnAuth&&johnAuth.client)||null;}catch(e){return null;}}
+function _shiftLogin(x){return ((x.member_email||'').split('@')[0])||x.role_label||'Сотрудник';}
+// охранники владельца: accepted team_links с фичей sec (имя = логин до @, как на карте)
+async function _shiftGuardsLoad(){if(_shiftGuards&&_shiftGuards.length)return _shiftGuards;try{var r=await johnTeam.list();var mine=(r&&r.mine)||[];_shiftGuards=mine.filter(function(x){return x.status==='accepted'&&x.member_id&&String(x.features||'').split(',').includes('sec');}).map(function(x){return {id:x.member_id,name:_shiftLogin(x)};});}catch(e){_shiftGuards=[];}return _shiftGuards;}
+// для охранника: id его руководителя (accepted team_link, где я — участник)
+async function _shiftOwnerLoad(){if(_shiftOwnerId)return _shiftOwnerId;try{var r=await johnTeam.list();var f=((r&&r.forMe)||[]).find(function(x){return x.status==='accepted';});_shiftOwnerId=f?f.owner_id:null;}catch(e){}return _shiftOwnerId;}
+function _shiftMonthKeys(y,m){var a=new Date(y,m-1,1),b=new Date(y,m+2,0);return [dkey(a.getFullYear(),a.getMonth(),1),dkey(b.getFullYear(),b.getMonth(),b.getDate())];}
+// смены за окно [пред.месяц .. след.месяц]; day из Postgres date = 'YYYY-MM-DD' (совпадает с dkey)
+async function _shiftsFetch(y,m,ownerId){var db=_shiftDb();if(!db||!ownerId)return;var k=_shiftMonthKeys(y,m);var r=await db.from('sec_shifts').select('id,owner_id,guard_id,guard_name,day').eq('owner_id',ownerId).gte('day',k[0]).lte('day',k[1]);if(r.error)throw r.error;Object.keys(_shiftByDay).forEach(function(d){if(d>=k[0]&&d<=k[1])delete _shiftByDay[d];});(r.data||[]).forEach(function(row){(_shiftByDay[row.day]=_shiftByDay[row.day]||[]).push(row);});}
+// из renderCal (владелец): один раз на видимый месяц — охранники + смены, затем перерисовать
+function _shiftsEnsure(y,m){var uid=_shiftUid();if(!uid)return;var mk=y+'-'+m;if(_shiftLoaded[mk])return;_shiftLoaded[mk]=1;_shiftGuardsLoad().then(function(g){if(!g||!g.length)return;return _shiftsFetch(y,m,uid).then(function(){try{if(document.getElementById('cal').classList.contains('show')&&calY===y&&calM===m)renderCal();}catch(e){}});}).catch(function(e){delete _shiftLoaded[mk];});}
+// тап по чипу в панели дня: поставить/снять смену (оптимистично, с откатом по ошибке)
+async function _shiftToggle(day,gid,gname){var db=_shiftDb(),uid=_shiftUid();if(!db||!uid||_shiftBusy)return;_shiftBusy=true;var rows=_shiftByDay[day]||[],cur=rows.find(function(r){return r.guard_id===gid;});try{if(cur){var d=await db.from('sec_shifts').delete().eq('id',cur.id);if(d.error)throw d.error;_shiftByDay[day]=rows.filter(function(r){return r.id!==cur.id;});}else{var ins=await db.from('sec_shifts').insert({owner_id:uid,guard_id:gid,guard_name:gname,day:day}).select('id,owner_id,guard_id,guard_name,day').maybeSingle();if(ins.error)throw ins.error;if(ins.data)(_shiftByDay[day]=_shiftByDay[day]||[]).push(ins.data);}}catch(e){toast('Не удалось сохранить смену');}_shiftBusy=false;renderCal();}
+// ---- экран «График работы» (#secCalView): только смены, ничего больше. Открывается из secView (охрана) и secOwnView (владелец) ----
+let _scY=null,_scM=null,_scSel=null,_scLoaded={},_scFrom='sec';
+function openSecCal(){closeAllSheets();var n=new Date();if(_scY==null){_scY=n.getFullYear();_scM=n.getMonth();}if(!_scSel)_scSel=dkey(n.getFullYear(),n.getMonth(),n.getDate());lockScroll();document.getElementById('secCalView').classList.add('show');try{animInOnce('secCalView');}catch(e){}currentView='secCal';try{syncSidenav();}catch(e){}_scLoaded={};_scRender();_scLoad();}
+function closeSecCal(){document.getElementById('secCalView').classList.remove('show');try{if(_scFrom==='own')openSecOwn();else openSecView();}catch(e){}}
+async function _scLoad(){var uid=_shiftUid();if(!uid)return;var mk=_scY+'-'+_scM;if(_scLoaded[mk])return;_scLoaded[mk]=1;try{var oid=(_scFrom==='own')?uid:(await _shiftOwnerLoad())||uid;await _shiftsFetch(_scY,_scM,oid);if(document.getElementById('secCalView').classList.contains('show'))_scRender();}catch(e){delete _scLoaded[mk];toast('Не удалось загрузить график');}}
+function _scRender(){var lbl=document.getElementById('scLabel');if(lbl)lbl.textContent=_MON[_scM]+' '+_scY;var grid=document.getElementById('scGrid');if(!grid)return;grid.innerHTML='';var uid=_shiftUid();_WD.forEach(function(w){var e=document.createElement('div');e.className='calwd';e.textContent=w;grid.appendChild(e);});var lead=(new Date(_scY,_scM,1).getDay()+6)%7,dim=new Date(_scY,_scM+1,0).getDate();var t=new Date(),tkey=dkey(t.getFullYear(),t.getMonth(),t.getDate());for(var i=0;i<lead;i++){var e0=document.createElement('div');e0.className='sccell empty';grid.appendChild(e0);}for(var d=1;d<=dim;d++){(function(d){var key=dkey(_scY,_scM,d),rows=_shiftByDay[key]||[],mine=rows.some(function(r){return r.guard_id===uid;});var c=document.createElement('div');c.className='sccell'+(key===tkey?' today':'')+(key===_scSel?' sel':'')+(mine?' mine':'')+(rows.length?' has':'');c.innerHTML='<div class="dn">'+d+'</div><div class="scnames">'+rows.slice(0,3).map(function(r){return '<span class="scn'+(r.guard_id===uid?' me':'')+'">'+esc(r.guard_name||'?')+'</span>';}).join('')+(rows.length>3?'<span class="scn">+'+(rows.length-3)+'</span>':'')+'</div>';c.addEventListener('click',function(){_scSel=key;_scRender();});grid.appendChild(c);})(d);}var dp=document.getElementById('scDay');if(dp){var p=_scSel.split('-').map(Number),rows2=_shiftByDay[_scSel]||[];var hh='<div class="dphd">'+p[2]+' '+_MON[p[1]-1].toLowerCase()+'</div>';if(!rows2.length)hh+='<div class="dayempty">Смен нет</div>';else hh+=rows2.map(function(r){var me=r.guard_id===uid;return '<div class="dayitem" style="background:var(--panel)"><span class="dot" style="background:'+SHIFT_COLOR+';flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>'+esc(r.guard_name||'?')+(me?' <span class="scme">вы</span>':'')+'</span></div><div class="tlc-b">на смене</div></div></div>';}).join('');dp.innerHTML=hh;}}
+(function(){var g=function(id){return document.getElementById(id);};if(g('scPrev'))g('scPrev').addEventListener('click',function(){_scM--;if(_scM<0){_scM=11;_scY--;}_scRender();_scLoad();});if(g('scNext'))g('scNext').addEventListener('click',function(){_scM++;if(_scM>11){_scM=0;_scY++;}_scRender();_scLoad();});if(g('scToday'))g('scToday').addEventListener('click',function(){var n=new Date();_scY=n.getFullYear();_scM=n.getMonth();_scSel=dkey(n.getFullYear(),n.getMonth(),n.getDate());_scRender();_scLoad();});if(g('scBack'))g('scBack').addEventListener('click',closeSecCal);document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#secCalOpen,#soCalOpen');if(!b)return;_scFrom=(b.id==='soCalOpen')?'own':'sec';openSecCal();});})();
 // сколько знакомы
 const knownSheet=document.getElementById('knownSheet'),knownInput=document.getElementById('knownInput'),knownWho=document.getElementById('knownWho');
 let knownPerson=null;
@@ -3423,7 +3458,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.77';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.78';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -3804,7 +3839,7 @@ function eventsForMonth(y,m){
   Object.keys(map).forEach(k=>map[k].sort((a,b)=>(a.time||0)-(b.time||0)));
   return map;
 }
-function openCal(){currentView='cal';const n=new Date();if(calY==null){calY=n.getFullYear();calM=n.getMonth();}if(!calSelKey)calSelKey=dkey(n.getFullYear(),n.getMonth(),n.getDate());lockScroll();document.getElementById('cal').classList.add('show');renderCal();}
+function openCal(){currentView='cal';_shiftLoaded={};const n=new Date();if(calY==null){calY=n.getFullYear();calM=n.getMonth();}if(!calSelKey)calSelKey=dkey(n.getFullYear(),n.getMonth(),n.getDate());lockScroll();document.getElementById('cal').classList.add('show');renderCal();}
 function closeCal(){document.getElementById('cal').classList.remove('show');unlockScroll();}
 /* ==== John: праздники (офлайн, большой набор) ==== */
 var _easterCache={};
@@ -4018,6 +4053,7 @@ function _holMain(arr){for(var i=0;i<arr.length;i++)if(arr[i].t==='gov'||arr[i].
 var calOverdueMode=false;
 function renderCal(){
   document.getElementById('calLabel').textContent=_MON[calM]+' '+calY;
+  try{_shiftsEnsure(calY,calM);}catch(e){}
   document.getElementById('calHistBtn').classList.toggle('on',calHist);
   const map=eventsForMonth(calY,calM);
   const grid=document.getElementById('calGrid');grid.innerHTML='';
@@ -4034,7 +4070,7 @@ function renderCal(){
   for(let i=0;i<lead;i++){const e=document.createElement('div');e.className='calcell empty';grid.appendChild(e);}
   for(let d=1;d<=dim;d++){const key=dkey(calY,calM,d),evs=map[key]||[];
     const cell=document.createElement('div');cell.className='calcell'+(key===tkey?' today':'')+(key===calSelKey?' sel':'');
-    const cols=[...new Set(evs.map(x=>x.color).concat(_hmap[key]||[]))].slice(0,4);
+    const cols=[...new Set(evs.map(x=>x.color).concat(_hmap[key]||[]).concat((_shiftByDay[key]&&_shiftByDay[key].length)?[SHIFT_COLOR]:[]))].slice(0,4);
     const _hol=getHolidays(calY,calM,d);const _main=_holMain(_hol);
     cell.innerHTML='<div class="dn">'+d+(_main?'<span class="holflag">'+_main.f+'</span>':'')+'</div><div class="dots">'+cols.map(c=>'<span class="dot" style="background:'+c+'"></span>').join('')+'</div>';
     cell.addEventListener('click',()=>{calSelKey=key;calOverdueMode=false;syncCalOverdueBtn();const _p=grid.querySelector('.calcell.sel');if(_p)_p.classList.remove('sel');cell.classList.add('sel');renderDayPanel(map);});
@@ -4076,7 +4112,10 @@ function renderDayPanel(map){
       html+='<div class="dayitem"><span class="dot" style="background:#2f6df0"></span><div><div class="di-t"><span class="evtag tag-meet">'+esc(ev.k)+'</span>'+(_hasT(ev.at)?fmtClock(ev.at)+' · ':'')+esc(ev.t)+'</div>'+(ev.loc?'<div class="di-s">'+esc(ev.loc)+'</div>':'')+'</div></div>';
     });
   }
+  // v2.78: смены СБ — чипы охранников, тап = на смене / нет (только владелец с охраной)
+  if(_shiftGuards&&_shiftGuards.length){var _sh=(_shiftByDay[calSelKey]||[]);html+='<div class="dphd" style="margin-top:14px">🛡 Охрана на смене'+(_sh.length?' · '+_sh.length:'')+'</div><div class="shiftchips">'+_shiftGuards.map(function(g){var on=_sh.some(function(r){return r.guard_id===g.id;});return '<button type="button" class="shiftchip'+(on?' on':'')+'" data-shiftg="'+esc(g.id)+'" data-shiftn="'+esc(g.name)+'">'+esc(g.name)+'</button>';}).join('')+'</div>';}
   el.innerHTML=html;
+  el.querySelectorAll('[data-shiftg]').forEach(function(b){b.addEventListener('click',function(ev){ev.stopPropagation();_shiftToggle(calSelKey,b.dataset.shiftg,b.dataset.shiftn);});});
   el.querySelectorAll('[data-meet]').forEach(it=>it.addEventListener('click',()=>{const m=meetings.find(x=>x.id===it.dataset.meet);if(m)openMeet(m,null);}));
   el.querySelectorAll('[data-evperson]').forEach(it=>it.addEventListener('click',()=>{const pp=people.find(x=>x.id===it.dataset.evperson);if(pp){returnToCal=calSelKey;closeCal();openDetail(pp);}}));
   el.querySelectorAll('[data-task]').forEach(it=>it.addEventListener('click',()=>openTaskEdit(it.dataset.task,null)));
@@ -4770,7 +4809,7 @@ function openNav(){closeAllSheets();document.querySelectorAll('#navSheet .navrow
 function closeNav(){backdrop.classList.remove('show');document.getElementById('navSheet').classList.remove('show');}
 document.getElementById('navBtn').addEventListener('click',openNav);
 document.getElementById('navClose').addEventListener('click',closeNav);var _ns=document.getElementById('navSettings');if(_ns)_ns.addEventListener('click',openSettings);
-function goHome(){currentView='home';try{if(typeof _mapStopMe==='function'){_mapStopMe();_mapUnsubscribeRT();_followTarget=null;_histOn=false;if(typeof _mapClearHist==='function')_mapClearHist();}}catch(e){}['cal','meetingsView','tasksView','graphView','projView','projDetail','boardsView','boardCanvas','tline','teamView','helpView','colView','secView','secOwnView','analyticsView','settingsSheet','mapView'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('show');});if(window._homeStale){window._homeStale=0;renderProjBar();renderLifeBar();renderCoBar();renderBoard();}unlockScroll();}
+function goHome(){currentView='home';try{if(typeof _mapStopMe==='function'){_mapStopMe();_mapUnsubscribeRT();_followTarget=null;_histOn=false;if(typeof _mapClearHist==='function')_mapClearHist();}}catch(e){}['cal','meetingsView','tasksView','graphView','projView','projDetail','boardsView','boardCanvas','tline','teamView','helpView','colView','secView','secOwnView','analyticsView','secCalView','settingsSheet','mapView'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('show');});if(window._homeStale){window._homeStale=0;renderProjBar();renderLifeBar();renderCoBar();renderBoard();}unlockScroll();}
 
 // ===== Схемы (boards / canvas) =====
 const BCOLORS=['#2f6df0','#2fa37a','#7c3aed','#e11d48','#ea580c','#c08a2e','#0ea5e9','#8c8c8c','#ec4899','#14b8a6','#84cc16','#6366f1','#f59e0b','#10b981','#06b6d4','#a855f7','#f43f5e','#64748b','#0f766e','#e8ebf0'];
@@ -5815,7 +5854,7 @@ function openLocMap(){
   _mapReturnTo=_shown||'home';
   try{_mapCloseSearch();}catch(e){}
   closeAllSheets();closeSettings();
-  ['secView','secOwnView','analyticsView','cal','meetingsView','tasksView','graphView','projView','projDetail','boardsView','boardCanvas','tline','teamView','helpView','colView','settingsSheet'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('show');});
+  ['secView','secOwnView','secCalView','analyticsView','cal','meetingsView','tasksView','graphView','projView','projDetail','boardsView','boardCanvas','tline','teamView','helpView','colView','settingsSheet'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('show');});
   lockScroll();document.getElementById('mapView').classList.add('show');
   // чистый вход: сбросить возможную свёрнутую историю с прошлого раза
   _histOn=false;_histCollapsed=false;try{_histClosePop();}catch(e){}var _hb=document.getElementById('mapHistBar');if(_hb)_hb.style.display='none';var _hbt=document.getElementById('mapHistBtn');if(_hbt){_hbt.style.background='var(--panel)';_hbt.style.color='inherit';}
@@ -5988,7 +6027,7 @@ function _mapBackToSec(){ _mapStopMe();_mapUnsubscribeRT();_followTarget=null;_h
     if(r==='projDetail'&&typeof openProjDetail==='function'&&typeof projDetailId!=='undefined'&&projDetailId){openProjDetail(projDetailId);return;}
     if(r==='boardCanvas'&&typeof openBoard==='function'&&typeof curBoard!=='undefined'&&curBoard&&curBoard.id){openBoard(curBoard.id);return;}
   }catch(e){}
-  var openers={cal:'openCal',meetingsView:'openMeetings',tasksView:'openTasks',graphView:'openGraph',projView:'openProjects',boardsView:'openBoards',colView:'openColleagues',secView:'openSecView',secOwnView:'openSecOwn',analyticsView:'openAnalytics',settingsSheet:'openSettings'};
+  var openers={cal:'openCal',meetingsView:'openMeetings',tasksView:'openTasks',graphView:'openGraph',projView:'openProjects',boardsView:'openBoards',colView:'openColleagues',secView:'openSecView',secOwnView:'openSecOwn',secCalView:'openSecCal',analyticsView:'openAnalytics',settingsSheet:'openSettings'};
   var fn=openers[r]&&window[openers[r]];
   if(typeof fn==='function'){try{fn();return;}catch(e){}}
   goHome();
@@ -6124,6 +6163,7 @@ function openSecView(){
 function renderSecView(){
   var el=document.getElementById('secBody');if(!el)return;
   var html='<div class="dphd">Статусы</div><div class="dayempty" id="secPushSt">Проверяю уведомления…</div>';
+  html+='<div class="dphd" style="margin-top:16px">📅 График работы</div><button type="button" class="dayitem" id="secCalOpen" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:#0ea5e9;flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>Смены службы безопасности</span></div><div class="tlc-b">кто и в какой день на посту · открыть ›</div></div></button>';
   html+='<div class="dphd" style="margin-top:16px">📍 Кто на связи</div><div id="secLocOthers"></div>';
   html+='<div class="dphd" style="margin-top:16px">Сигналы</div><div id="secAlerts" style="margin-top:6px"><div class="dayempty">Загружаю…</div></div>';
   el.innerHTML=html;
@@ -6450,6 +6490,7 @@ function renderSecOwn(){
     +'<div class="dayempty" style="padding:0">Ссылку вешайте на Кнопку действия или стук по крышке: «Команды» → «Получить содержимое URL»</div>'
     +'</div>';
   }
+  html+='<div class="dphd" style="margin-top:18px">📅 График работы</div><button type="button" class="dayitem" id="soCalOpen" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:#0ea5e9;flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>Смены службы безопасности</span></div><div class="tlc-b">обзор по месяцу · ставить смены — в календаре, тапом по дню</div></div></button>';
   html+='<div class="dphd" style="margin-top:18px">📍 Кто на связи</div><div id="soLocOthers"></div>';
   html+='<div class="dphd" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:8px">История сигналов <button class="ctl" id="soHistToggle" style="flex:none;padding:5px 12px;margin:0">'+(_soHistOpen?'Скрыть':'Показать')+'</button></div>';
   if(_soHistOpen){ html+='<div id="soList"><div class="dayempty">Загружаю…</div></div>'; }
@@ -7036,6 +7077,26 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 .tlcard .dot.alive,.tlnew{animation:alivePulse 1.5s ease-in-out infinite}
 </style>
 <style>
+/* v2.78: график работы СБ — чипы в панели дня (владелец) и экран #secCalView (только смены) */
+.shiftchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.shiftchip{border:1px solid var(--panel-line);background:var(--bg2);color:inherit;border-radius:20px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:transform var(--dur-tap) var(--tap-spring),background-color .15s ease,border-color .15s ease,color .15s ease}
+.shiftchip:active{transform:scale(.95);transition-duration:var(--dur-press)}
+.shiftchip.on{background:#0ea5e9;border-color:#0ea5e9;color:#fff}
+.scbody{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.scnav{display:flex;align-items:center;gap:8px;padding:10px 14px 4px}
+.sclabel{flex:1;text-align:center;font-weight:800;font-size:16px}
+.scgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:6px 12px}
+.sccell{min-height:58px;border-radius:10px;background:var(--panel);border:1px solid var(--panel-line);padding:5px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.sccell.empty{background:transparent;border-color:transparent;cursor:default}
+.sccell .dn{font-size:12px;font-weight:700;opacity:.8}
+.sccell.today .dn{color:#2f6df0}
+.sccell.sel{outline:2px solid #2f6df0;outline-offset:-1px}
+.sccell.mine{background:rgba(14,165,233,.16);border-color:rgba(14,165,233,.55)}
+.scnames{display:flex;flex-direction:column;gap:2px;min-width:0}
+.scn{font-size:10.5px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.scn.me{color:#0ea5e9}
+.scme{font-size:10.5px;font-weight:700;color:#0ea5e9;margin-left:4px;text-transform:uppercase;letter-spacing:.05em}
+#scDay{padding:8px 14px 24px}
 /* v2.77: менеджер статусов людей (шторка #statusesSheet) */
 .stm-row{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--panel-line);border-radius:9px;margin-bottom:7px}
 .stm-nm{flex:1;font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
