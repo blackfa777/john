@@ -2846,22 +2846,14 @@ function closeStatusesMgr(){backdrop.classList.remove('show');statusesSheet.clas
 document.getElementById('stmDone').addEventListener('click',closeStatusesMgr);
 document.getElementById('statusesBtn').addEventListener('click',openStatusesMgr);
 // ===== График работы СБ (v2.78): смена = «кто работает в этот день», без часов. Таблица sec_shifts (owner all / members read). =====
-let _shiftByDay={},_shiftGuards=null,_shiftOwnerId=null,_shiftLoaded={},_shiftBusy=false;
-const SHIFT_COLOR='#0ea5e9';
+let _shiftByDay={},_shiftOwnerId=null,_shiftBusy=false;
 function _shiftUid(){try{return (window.johnAuth&&johnAuth.user&&johnAuth.user())?johnAuth.user().id:null;}catch(e){return null;}}
 function _shiftDb(){try{return (window.johnAuth&&johnAuth.client)||null;}catch(e){return null;}}
-function _shiftLogin(x){return ((x.member_email||'').split('@')[0])||x.role_label||'Сотрудник';}
-// охранники владельца: accepted team_links с фичей sec (имя = логин до @, как на карте)
-async function _shiftGuardsLoad(){if(_shiftGuards&&_shiftGuards.length)return _shiftGuards;try{var r=await johnTeam.list();var mine=(r&&r.mine)||[];_shiftGuards=mine.filter(function(x){return x.status==='accepted'&&x.member_id&&String(x.features||'').split(',').includes('sec');}).map(function(x){return {id:x.member_id,name:_shiftLogin(x)};});}catch(e){_shiftGuards=[];}return _shiftGuards;}
 // для охранника: id его руководителя (accepted team_link, где я — участник)
 async function _shiftOwnerLoad(){if(_shiftOwnerId)return _shiftOwnerId;try{var r=await johnTeam.list();var f=((r&&r.forMe)||[]).find(function(x){return x.status==='accepted';});_shiftOwnerId=f?f.owner_id:null;}catch(e){}return _shiftOwnerId;}
 function _shiftMonthKeys(y,m){var a=new Date(y,m-1,1),b=new Date(y,m+2,0);return [dkey(a.getFullYear(),a.getMonth(),1),dkey(b.getFullYear(),b.getMonth(),b.getDate())];}
 // смены за окно [пред.месяц .. след.месяц]; day из Postgres date = 'YYYY-MM-DD' (совпадает с dkey)
 async function _shiftsFetch(y,m,ownerId){var db=_shiftDb();if(!db||!ownerId)return;var k=_shiftMonthKeys(y,m);var r=await db.from('sec_shifts').select('id,owner_id,guard_id,guard_name,day,created_by,kind,note').eq('owner_id',ownerId).gte('day',k[0]).lte('day',k[1]);if(r.error)throw r.error;Object.keys(_shiftByDay).forEach(function(d){if(d>=k[0]&&d<=k[1])delete _shiftByDay[d];});(r.data||[]).forEach(function(row){(_shiftByDay[row.day]=_shiftByDay[row.day]||[]).push(row);});}
-// из renderCal (владелец): один раз на видимый месяц — охранники + смены, затем перерисовать
-function _shiftsEnsure(y,m){var uid=_shiftUid();if(!uid)return;var mk=y+'-'+m;if(_shiftLoaded[mk])return;_shiftLoaded[mk]=1;_shiftGuardsLoad().then(function(g){if(!g||!g.length)return;return _shiftsFetch(y,m,uid).then(function(){try{if(document.getElementById('cal').classList.contains('show')&&calY===y&&calM===m)renderCal();}catch(e){}});}).catch(function(e){delete _shiftLoaded[mk];});}
-// имена на смене в ячейке календаря владельца (v2.80): телефон — 1 имя «+N», десктоп — до 3 столбиком
-function _calShiftHtml(key,wide){var rows=_shiftByDay[key]||[];if(!rows.length)return '';wide=!!wide;var max=wide?3:1;var show=rows.slice(0,max),more=rows.length-show.length;return '<div class="calsh">'+show.map(function(r){return '<span class="calshn '+_shiftK(r).cls+'">'+esc(r.guard_name||'?')+'</span>';}).join('')+(more>0?'<span class="calshn more">+'+more+'</span>':'')+'</div>';}
 // тап по чипу в панели дня: поставить/снять смену (оптимистично, с откатом по ошибке)
 // ---- экран «График работы» (#secCalView): только смены, ничего больше. Открывается из secView (охрана) и secOwnView (владелец) ----
 let _scY=null,_scM=null,_scSel=null,_scLoaded={},_scFrom='sec';
@@ -3471,7 +3463,7 @@ document.getElementById('confirmYes').addEventListener('click',()=>{const cb=con
 document.getElementById('confirmNo').addEventListener('click',closeConfirm);
 
 // ---------- controls ----------
-window.APP_VER='v2.81';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
+window.APP_VER='v2.82';(function(){try{document.querySelectorAll('.ctitle').forEach(function(t){if(!t.querySelector('.verbadge')){var e=document.createElement('span');e.className='verbadge';e.textContent=window.APP_VER;t.appendChild(e);}});}catch(e){}})();
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1600);}
 function animInOnce(id){var el=document.getElementById(id);if(!el)return;el.classList.add('animin');clearTimeout(el._aiT);el._aiT=setTimeout(function(){el.classList.remove('animin');},650);}
 document.getElementById('addBtn').addEventListener('click',addPerson);
@@ -3852,7 +3844,7 @@ function eventsForMonth(y,m){
   Object.keys(map).forEach(k=>map[k].sort((a,b)=>(a.time||0)-(b.time||0)));
   return map;
 }
-function openCal(){currentView='cal';_shiftLoaded={};const n=new Date();if(calY==null){calY=n.getFullYear();calM=n.getMonth();}if(!calSelKey)calSelKey=dkey(n.getFullYear(),n.getMonth(),n.getDate());lockScroll();document.getElementById('cal').classList.add('show');renderCal();}
+function openCal(){currentView='cal';const n=new Date();if(calY==null){calY=n.getFullYear();calM=n.getMonth();}if(!calSelKey)calSelKey=dkey(n.getFullYear(),n.getMonth(),n.getDate());lockScroll();document.getElementById('cal').classList.add('show');renderCal();}
 function closeCal(){document.getElementById('cal').classList.remove('show');unlockScroll();}
 /* ==== John: праздники (офлайн, большой набор) ==== */
 var _easterCache={};
@@ -4066,10 +4058,9 @@ function _holMain(arr){for(var i=0;i<arr.length;i++)if(arr[i].t==='gov'||arr[i].
 var calOverdueMode=false;
 function renderCal(){
   document.getElementById('calLabel').textContent=_MON[calM]+' '+calY;
-  try{_shiftsEnsure(calY,calM);}catch(e){}
   document.getElementById('calHistBtn').classList.toggle('on',calHist);
   const map=eventsForMonth(calY,calM);
-  const grid=document.getElementById('calGrid');grid.innerHTML='';const _shWide=(grid.getBoundingClientRect().width/7)>=80;grid.classList.toggle('shwide',_shWide);
+  const grid=document.getElementById('calGrid');grid.innerHTML='';
   _WD.forEach(w=>{const e=document.createElement('div');e.className='calwd';e.textContent=w;grid.appendChild(e);});
   const lead=(new Date(calY,calM,1).getDay()+6)%7;
   const dim=new Date(calY,calM+1,0).getDate();
@@ -4085,7 +4076,7 @@ function renderCal(){
     const cell=document.createElement('div');cell.className='calcell'+(key===tkey?' today':'')+(key===calSelKey?' sel':'');
     const cols=[...new Set(evs.map(x=>x.color).concat(_hmap[key]||[]))].slice(0,4);
     const _hol=getHolidays(calY,calM,d);const _main=_holMain(_hol);
-    cell.innerHTML='<div class="dn">'+d+(_main?'<span class="holflag">'+_main.f+'</span>':'')+'</div>'+_calShiftHtml(key,_shWide)+'<div class="dots">'+cols.map(c=>'<span class="dot" style="background:'+c+'"></span>').join('')+'</div>';
+    cell.innerHTML='<div class="dn">'+d+(_main?'<span class="holflag">'+_main.f+'</span>':'')+'</div><div class="dots">'+cols.map(c=>'<span class="dot" style="background:'+c+'"></span>').join('')+'</div>';
     cell.addEventListener('click',()=>{calSelKey=key;calOverdueMode=false;syncCalOverdueBtn();const _p=grid.querySelector('.calcell.sel');if(_p)_p.classList.remove('sel');cell.classList.add('sel');renderDayPanel(map);});
     grid.appendChild(cell);
   }
@@ -4126,8 +4117,6 @@ function renderDayPanel(map){
     });
   }
   // v2.78: смены СБ — чипы охранников, тап = на смене / нет (только владелец с охраной)
-  // v2.81: смены ведёт сама охрана; владельцу — список статусов дня (на смене / отпуск / больничный: чем)
-  {var _sh=(_shiftByDay[calSelKey]||[]);if(_sh.length){html+='<div class="dphd" style="margin-top:14px">🛡 Охрана · '+_sh.length+'</div>'+_sh.map(function(r){return _shiftRowHtml(r,false);}).join('');}}
   el.innerHTML=html;
   el.querySelectorAll('[data-meet]').forEach(it=>it.addEventListener('click',()=>{const m=meetings.find(x=>x.id===it.dataset.meet);if(m)openMeet(m,null);}));
   el.querySelectorAll('[data-evperson]').forEach(it=>it.addEventListener('click',()=>{const pp=people.find(x=>x.id===it.dataset.evperson);if(pp){returnToCal=calSelKey;closeCal();openDetail(pp);}}));
@@ -6503,7 +6492,7 @@ function renderSecOwn(){
     +'<div class="dayempty" style="padding:0">Ссылку вешайте на Кнопку действия или стук по крышке: «Команды» → «Получить содержимое URL»</div>'
     +'</div>';
   }
-  html+='<div class="dphd" style="margin-top:18px">📅 График работы</div><button type="button" class="dayitem" id="soCalOpen" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:#0ea5e9;flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>Смены службы безопасности</span></div><div class="tlc-b">обзор по месяцу · ставить смены — в календаре, тапом по дню</div></div></button>';
+  html+='<div class="dphd" style="margin-top:18px">📅 График работы</div><button type="button" class="dayitem" id="soCalOpen" style="cursor:pointer;width:100%;text-align:left;border:none;background:var(--panel)"><span class="dot" style="background:#0ea5e9;flex:none"></span><div class="tlc-in"><div class="tlc-t"><span>Смены службы безопасности</span></div><div class="tlc-b">кто на смене, в отпуске, на больничном · по месяцам</div></div></button>';
   html+='<div class="dphd" style="margin-top:18px">📍 Кто на связи</div><div id="soLocOthers"></div>';
   html+='<div class="dphd" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:8px">История сигналов <button class="ctl" id="soHistToggle" style="flex:none;padding:5px 12px;margin:0">'+(_soHistOpen?'Скрыть':'Показать')+'</button></div>';
   if(_soHistOpen){ html+='<div id="soList"><div class="dayempty">Загружаю…</div></div>'; }
@@ -7123,16 +7112,6 @@ body:not(.light) #authGate .auth-btn{background:#232234;box-shadow:var(--shadow-
 .sccell.mine.vac{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.55)}
 .sccell.mine.sick{background:rgba(244,63,94,.16);border-color:rgba(244,63,94,.55)}
 .scn.vac{color:#f59e0b}.scn.sick{color:#f43f5e}
-.calcell .calshn.vac{color:#f59e0b}.calcell .calshn.sick{color:#f43f5e}
-.calcell.sel .calshn.vac,.calcell.sel .calshn.sick{color:#fff}
-/* v2.80: имена на смене в ячейке календаря владельца */
-.calcell .calsh{display:flex;flex-wrap:nowrap;align-items:baseline;gap:2px;margin-top:1px;min-width:0;max-width:100%;overflow:hidden}
-.calcell .calshn{font-size:9px;line-height:1.15;font-weight:700;color:#0ea5e9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.calcell .calshn.more{flex:none;opacity:.85;font-size:8.5px}
-.calcell.sel .calshn{color:#fff}
-body.light .calcell .calshn{color:#0369a1}
-body.light .calcell.sel .calshn{color:#fff}
-.calgrid.shwide .calsh{flex-direction:column;align-items:stretch;gap:1px}.calgrid.shwide .calshn{font-size:10.5px}
 /* v2.77: менеджер статусов людей (шторка #statusesSheet) */
 .stm-row{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--panel-line);border-radius:9px;margin-bottom:7px}
 .stm-nm{flex:1;font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
